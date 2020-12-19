@@ -1,0 +1,28 @@
+---
+title: "rawdata"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readxl)
+```
+
+```{r}
+sites <- read_excel("data/Neofitas_sites.xlsx", sheet = "sites")
+neophytes <- read_excel("data/Neofitas_species.xlsx", sheet = "neophytes")
+taxonomy <- read_excel("data/Neofitas_species.xlsx", sheet = "taxonomy")
+```
+
+```{r}
+save(
+  sites,neophytes,taxonomy,
+  file="data/rawdata.RData"
+)
+```
+

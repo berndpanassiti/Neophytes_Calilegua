@@ -1,0 +1,17 @@
+# macOS Files
+.DS_Store
+
+# R files
+.Rproj.user
+.Rhistory
+Neofitas.Rproj
+
+# folder
+data/
+documentos_beca/
+figures/
+GIS/
+literature/
+notes/
+paper/
+

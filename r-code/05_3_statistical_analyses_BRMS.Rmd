@@ -1,0 +1,144 @@
+---
+title: "workingdata"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+source("r-code/00_functions.R")
+load("data/workingdata.RData")
+using("ggplot2","tidyverse","knitr","brms")
+```
+
+
+
+https://www.monicaalexander.com/posts/2020-28-02-bayes_viz/
+
+
+```{r}
+dat = preds %>% dplyr::select(ring) # colSums(is.na(df))
+
+# One-Hot Encoding
+# Creating dummy variables is converting a categorical variable to as many binary variables as here are categories.
+dummies_model <- caret::dummyVars( ~ ., data=dat)
+
+# Create the dummy variables using predict. The Y variable (Purchase) will not be present in trainData_mat.
+GBMpreds <- data.frame(predict(dummies_model, newdata = dat))
+#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],slope=preds$slope,treeAbund.4 = preds$treeAbund.4,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
+#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],slope=preds$slope,treeAbund.4 = preds$treeAbund.4)
+#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],herbAbund.4=preds$herbAbund.4,treeAbund.4 = preds$treeAbund.4,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
+#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],activity=preds$activity,plant_comunity.forest=preds$plant_comunity.forest,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
+GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],activity=preds$activity,soil_type.2=preds$soil_type.2,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
+```
+
+
+
+
+```{r}
+df = GbmPlantsPreds
+fit=list()
+
+for (s in 1:6){
+dat=data.frame(cbind(y=df[,s],df[,7:ncol(df)],sites[,1]))
+family=bernoulli(link = "logit")
+
+if(s %in% c(5,6)) {family = "poisson"}
+
+set.seed(2020)
+fit[[s]] <- brm(y ~ ring.1 + ring.2 + ring.3 + ring.4 + activity+soil_type.2 + plant_comunity.altered.forest+(1|site_id),data=dat,family=family,iter = 5000,chains=4,
+                control = list(adapt_delta = 0.9,max_treedepth=15))
+}
+
+
+lapply(fit, function(x)summary(x))
+```
+
+```{r}
+for (i in 1:6){
+set.seed(2020)
+fit[[i]] <- brms::add_criterion(fit[[i]], c("loo", "bayes_R2","loo_R2"))
+assign(paste("fit",i,".loo",sep=""),fit[[i]])
+}
+
+#variance_decomposition:
+#variance_decomposition(fit[[1]],robust = TRUE)
+
+# loo
+looEst1 = fit1.loo$criteria$loo$estimates[3,1]
+looEst2 = fit2.loo$criteria$loo$estimates[3,1]
+looEst3 = fit3.loo$criteria$loo$estimates[3,1]
+looEst4 = fit4.loo$criteria$loo$estimates[3,1]
+
+
+
+LOOICind.mean = mean(c(looEst1,looEst2,looEst3,looEst4))
+LOOICind.min = min(c(looEst1,looEst2,looEst3,looEst4))
+LOOICind.max = max(c(looEst1,looEst2,looEst3,looEst4))
+LOOICind.mean;LOOICind.min;LOOICind.max
+fit5.loo$criteria$loo$estimates[3,1];fit6.loo$criteria$loo$estimates[3,1]
+
+# loo_R2
+# loo
+r2Est1 = mean(fit1.loo$criteria$bayes_R2)
+r2Est2 = mean(fit2.loo$criteria$bayes_R2)
+r2Est3 = mean(fit3.loo$criteria$bayes_R2)
+r2Est4 = mean(fit4.loo$criteria$bayes_R2)
+
+
+
+r2ind.mean = mean(c(r2Est1,r2Est2,r2Est3,r2Est4))
+r2ind.min = min(c(r2Est1,r2Est2,r2Est3,r2Est4))
+r2ind.max = max(c(r2Est1,r2Est2,r2Est3,r2Est4))
+r2ind.mean;r2ind.min;r2ind.max
+mean(fit5.loo$criteria$bayes_R2);mean(fit6.loo$criteria$bayes_R2)
+
+
+
+```
+
+```{r}
+for (i in 1:6){
+  set.seed(2020)
+
+kfold1 <- kfold(fit[[i]],  save_fits = TRUE)
+assign(paste("fit",i,".10fold",sep=""),fit[[i]])
+}
+
+
+fit[[i]] <- brms::add_criterion(fit[[i]], c("loo", "bayes_R2","loo_R2"))
+```
+
+
+
+```{r}
+# perform 10-fold cross validation
+set.seed(2020)
+kfold1 <- kfold(fit[[1]],  save_fits = TRUE)
+
+test=brms::add_criterion(kfold1$fits[[1]], c("loo", "bayes_R2","loo_R2"))
+predict(kfold1$fits[[1]],type = "response")
+
+
+brmAUC=rep(0,4)
+for (s in 1:4){
+  set.seed(2020)
+  fittedData = fit[[s]]
+  y = GbmPlantsPreds[,s]
+  # Using the pROC package
+brmAUC[s]=as.numeric(pROC::roc(response = y, predictor = predict(fittedData, type = "response")[ , "Estimate"], plot = FALSE, print.auc = TRUE)$auc)
+}
+mean(brmAUC);min(brmAUC);max(brmAUC)
+
+```
+
+
+
+```{r}
+save(fit,file="data/result.brms.RData")
+```
+

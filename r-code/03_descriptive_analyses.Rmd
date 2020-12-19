@@ -1,0 +1,266 @@
+---
+title: "workingdata"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+source("r-code/00_functions.R") # data_summary
+load("data/workingdata.RData")
+source("r-code/00_functions.R")
+library(ggplot2)
+library(ellipse) #library(GGally) problem with NA's
+library(tidyverse)
+library(vegan)
+library(labdsv)
+library(magrittr) # for %<>%
+
+mytheme <-  theme(axis.title = element_text(size =18),
+        axis.text = element_text(size =14),
+        strip.text= element_text(size = 18),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5))
+```
+
+
+# 1 How many sites were sampled with how many plots and how many plants were found
+
+apply(plantOccSite[,-c(1)],1,sum)
+is the same as following command from biodiversityR package:
+diversityresult(plantOccSite[,-c(1)], index = 'richness', method = 'each site')
+
+```{r}
+# nr. plants per site
+plantsCounts=as_tibble(cbind(vegSite[,1],N_neophytes=apply(vegSite[,-c(1)],1,sum)))
+
+# # nr. plants per ring
+# s=speciesPercent[,4:17]
+# s[s>0]=1
+# plants=as_tibble(cbind(speciesPercent[,1:2],s))
+# plantsGrp=plants %>% dplyr::group_by(site_id,ring) %>% summarise_all("max")
+# plantsCounts=as_tibble(cbind(plantsGrp[,1:2],counts=apply(plantsGrp[,-c(1:2)],1,sum)))
+
+
+x=table(sites$site_id,sites$ring);x
+df= data.frame(cbind(site_id=rownames(x),x,total=apply(x,1,sum),N_neophytes = plantsCounts$N_neophytes))
+colnames(df)[2:5]=1:4;
+df[] <- lapply(df, as.numeric)
+df
+total=apply(df,2,sum)
+total[1]=nrow(df)
+rbind(df,total=total)
+hist(df$N_neophytes,main="Histogram of number of neophytes sample per site",xlab="Number of neophytes sample per site")
+```
+
+
+# 2 Number of neophytes per plot depending on site activity
+```{r}
+# tables needed: sites, veg
+x=table(sites$ring,sites$activity);x # N plots per ring and activity
+
+vegRingActivity = merge(x = veg, y = sites[,c("site_id","ring","plot_id","activity")], by = c("site_id","ring","plot_id"), all.x = TRUE)
+
+df= vegRingActivity %>% dplyr::select(-site_id,-plot_id)
+
+df$ring=as.factor(df$ring)
+df$activity=as.factor(df$activity)
+
+vegCoverMeanRingActivity = df %>% dplyr::group_by(ring,activity)%>% dplyr::summarise_if(is.numeric, mean)
+vegOccMeanRingActivity = vegCoverMeanRingActivity %>% select(-ring,activity) %>% mutate_if(is.numeric, ~1 * (. > 0)) # all values >0 to zero
+
+
+# barplot: N species per ring and activity
+df = vegOccMeanRingActivity[,1:2]
+df$N_neophytes = vegan::specnumber(vegOccMeanRingActivity[,-c(1:2)])
+
+df$nObs <- paste(levels(df$activity),"\n(N=",as.vector(table(vegRingActivity$activity,vegRingActivity$ring)),")",sep="")
+
+
+ggplot(df,aes(x=nObs,y=N_neophytes,fill=activity)) + geom_bar(stat="identity") + 
+    #ggtitle(paste("Number of neophyte presences per ring and petrol activity"))+
+    labs(y = "Number of neophyte presences", x = "") + # rename y-axis
+    scale_fill_manual(values=rep(c("grey41", "grey79"),5))+
+    facet_grid(~ring, scales="free_x")+
+    scale_x_discrete(breaks=df$nObs,labels=df$nObs) +
+   theme_bw() + mytheme
+
+
+```
+
+
+
+# 3 Diversity boxplots per plot depending on site activity
+
+```{r}
+# tables needed: sites, vegEnv
+df = vegEnv %>% dplyr::select(-site_id,-plot_id)
+df%<>%filter(Dneophytes!=0) # library(magrittr) for %<>%
+df$ring=as.factor(df$ring)
+df$activity=as.factor(df$activity)
+df$value=df$Dneophytes
+df%<>% arrange(ring,activity) # sort for ring and activity
+
+
+
+
+
+
+########### Kruskal-Wallis #############
+df %>% group_by(ring) %>% do(tidy(kruskal.test(x = .$Dneophytes, g = .$activity)))
+
+%>% get_summary_stats(Dneophytes, type = "mean_sd")
+kruskal.test(Dneophytes ~ activity, data = dat)
+df %>% group_by(ring) %>% do(tidy(kruskal.test(x = .$Dneophytes, g = .$activity)))
+
+# #	Kruskal-Wallis rank sum test
+#   ring  statistic p.value parameter method                      
+#   <fct>     <dbl>   <dbl>     <int> <chr>                       
+# 1 1        0       1              1 Kruskal-Wallis rank sum test
+# 2 2        0.0767  0.782          1 Kruskal-Wallis rank sum test
+# 3 3        3.30    0.0694         1 Kruskal-Wallis rank sum test
+# 4 4        0.666   0.415          1 Kruskal-Wallis rank sum test
+# 5 ref      2.68    0.101          1 Kruskal-Wallis rank sum test
+# -> no significance
+
+####################################################
+
+
+
+
+# function to let barplot start a 1, since invSimpson starts from 1 (= lowest diversity)
+require(scales)
+my_trans <- function(from=0) 
+{
+  trans <- function(x) x-from
+  inv <- function(x) x+from
+  trans_new("myscale", trans, inv, 
+            domain = c(from, Inf))
+}
+
+
+
+
+dfPlot <- data_summary(df, varname=c("value"),
+                    groupnames=c("ring","activity"))
+dfPlot$yminSD<-dfPlot$value-dfPlot$sd
+dfPlot$ymaxSD<-dfPlot$value+dfPlot$sd
+dfPlot[which(dfPlot$yminSD<1),"yminSD"]<-1
+
+dfPlot$nObs =  paste(levels(df$activity),"\n(N=",as.vector(table(df$activity,df$ring)),")",sep="")
+
+
+#dfPlot$sig<-  rep("a",nrow(dfPlot))
+dfPlot$sig<-c("","","a","a","a","a","a","a","","")
+
+  ggplot(dfPlot,aes(x=nObs,y=value,fill=activity)) + geom_bar(stat="identity")+
+  geom_errorbar(aes(ymin=yminSD, ymax=ymaxSD), width=.2) +
+  #scale_x_discrete(labels=nObs) +
+  labs(y = "inverse Simpson index", x = "") + # rename y-axis
+    scale_fill_manual(values=rep(c("grey41", "grey79"),5))+
+    facet_grid(~ring, scales="free_x")+
+    scale_y_continuous(trans = my_trans( from=1),breaks=c(1,1.5,2)) +
+  theme_bw() + mytheme +
+  geom_text(mapping = aes( y =2.1, label = sig),size = 6,  fontface=1)
+```
+
+
+
+
+
+# 3 Diversity boxplots per plot
+
+```{r}
+# tables needed: sites, vegEnv
+df = vegEnv %>% dplyr::select(ring,Dneophytes)
+df%<>%filter(Dneophytes!=0) # library(magrittr) for %<>%
+df$ring=as.factor(df$ring)
+df%<>% arrange(ring) # sort for ring and activity
+dfTest=df
+
+########### Kruskal-Wallis #############
+# 1) Differences between rings
+df=dfTest
+kruskal.test(Dneophytes ~ ring, data = df)
+
+# 	Kruskal-Wallis rank sum test
+# 
+# data:  Dneophytes by ring
+# Kruskal-Wallis chi-squared = 3.1111, df = 4, p-value = 0.5394
+
+
+# 2) Differences between 1-4 and ref
+df=dfTest
+df$compRing = 1
+df[which(df$ring=="ref"),"compRing"]=2
+kruskal.test(Dneophytes ~ compRing, data = df)
+
+# 	Kruskal-Wallis rank sum test
+# 
+# data:  Dneophytes by compRing
+# Kruskal-Wallis chi-squared = 0.00061054, df = 1, p-value = 0.9803
+
+
+# 3) Differences between 2-4 and 1
+df=dfTest
+df%<>%filter(!ring=="ref")
+df$compRing = 1
+df[which(df$ring=="1"),"compRing"]=2
+kruskal.test(Dneophytes ~ df$compRing, data = df)
+
+# 	Kruskal-Wallis rank sum test
+# 
+# data:  Dneophytes by df$compRing
+# Kruskal-Wallis chi-squared = 1.818, df = 1, p-value = 0.1776
+
+
+# 4) Differences between 2-4
+df=dfTest
+df%<>%filter(!ring %in% c("ref","1"))
+kruskal.test(Dneophytes ~ df$ring, data = df)
+
+# 	Kruskal-Wallis rank sum test
+# 
+# data:  Dneophytes by df$ring
+# Kruskal-Wallis chi-squared = 1.3439, df = 2, p-value = 0.5107
+
+```
+
+1) Differences between all rings: not significant 
+2) Differences between all rings 1-4 vs. ref: not significant 
+3) Differences between rings 2-4 vs. 1: not significant 
+4) Differences between rings 2-4: not significant  
+
+
+
+
+# Descriptive figure - Number of neophytes presences per zone
+- attention: this plot maybe wrong due to unequal number of plots
+```{r}
+df = neophytesPlotPercent
+dfGather = df %>% gather(key = "species", value = "cover", 4:17)
+
+dfPlot<- dfGather %>% filter(cover!=0) %>% count(ring,species)
+
+ggplot(dfPlot,aes(x=species,y=n))+ geom_bar(stat="identity")+
+    facet_wrap(~ring, ncol=5)+
+  labs(x= "", y = "Number of presences") + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 0, vjust=0.4,face = "italic"))
+
+
+```
+
+
+
+
+
+
+annotation: for boxplots
+nObs <- paste(levels(df$activity),"\n(N=",as.vector(table(df$activity,df$ring)),")",sep="")
+df$nObs = rep(nObs,as.vector(table(df$activity,df$ring)))
+

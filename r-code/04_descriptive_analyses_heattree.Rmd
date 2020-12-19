@@ -1,0 +1,93 @@
+---
+title: "02_workingdata"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+Manipulating data.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+Printing tibble tables:
+options(tibble.width = 100,pillar.min_title_chars=Inf)# putput width, and no column name truncation
+print(insectOTU$data$tax_abund,n=40,n_extra=0)
+
+
+
+
+```{r}
+load("data/workingdata.RData")
+
+library(tidyr)
+library(dplyr)
+library(tibble)
+library(taxa)
+library(metacoder)
+library(ggplot2)
+```
+
+
+
+```{r}
+# veg_data=data.frame(t(veg[,-c(1:3)]))
+# colnames(veg_data)=veg$plot_id
+# veg_data$species = rownames(veg_data)
+
+veg_data = neophytes
+
+
+veg_data = dplyr::left_join(veg_data,taxonomy,by=c("species"="species"))
+
+```
+
+
+
+
+# Plotting taxonomic data
+
+## Heat tree using OTUs
+### Heat tree of OTU only Hemiptera (= 156 OTUs)
+```{r}
+NeophytesTaxmap_Cover =parse_tax_data(veg_data,
+               class_cols = "taxonomy",
+               class_sep=";",
+               class_regex = "^([a-z]{0,1})_{0,2}(.*)$",
+               class_key = c("tax_rank" = "taxon_rank", "name" = "taxon_name"))
+print(NeophytesTaxmap_Cover)
+```
+
+```{r}
+# Heat tree of Hemiptera OTUs
+load("data/insectOTU.RData") # needs to be loaded every time
+
+set.seed(1) 
+NeophytesTaxmap_Cover %>%
+heat_tree(node_label = taxon_names,
+          node_color = n_obs,
+          node_size = n_obs,
+          layout = "da",
+          initial_layout = "re")
+```
+
+
+### Heat tree of Arthropoda OTUs
+```{r}
+set.seed(1) 
+# Arthropoda
+insectOTU %>%
+filter_taxa(taxon_names == "Arthropoda",subtaxa = TRUE) %>%
+filter_taxa(taxon_ranks %in% c("p","c","o","f")) %>%
+heat_tree(node_label = taxon_names,
+node_color = n_obs,
+node_size = n_obs,
+layout = "da",
+initial_layout = "re")
+```
+
+

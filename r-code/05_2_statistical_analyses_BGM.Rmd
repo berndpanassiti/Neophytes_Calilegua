@@ -1,0 +1,484 @@
+---
+title: "Boosted regression trees"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+source("r-code/00_functions.R")
+load("data/workingdata.RData")
+using("ggplot2","tidyverse","purrr","dplyr","broom","knitr","dismo","skimr","caret")
+
+rm(.Random.seed, envir=globalenv())
+set.seed(2020)
+```
+
+https://rspatial.org/raster/sdm/9_sdm_brt.html
+https://statistik-dresden.de/archives/14967
+http://uc-r.github.io/gbm_regression
+
+Input data:
+env = environmental variables
+plants = selected neophytes + species richness
+
+
+```{r}
+dat = preds %>% dplyr::select(ring) # colSums(is.na(df))
+
+# One-Hot Encoding
+# Creating dummy variables is converting a categorical variable to as many binary variables as here are categories.
+dummies_model <- caret::dummyVars( ~ ., data=dat)
+
+# Create the dummy variables using predict. The Y variable (Purchase) will not be present in trainData_mat.
+GBMpreds <- data.frame(predict(dummies_model, newdata = dat))
+#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],slope=preds$slope,treeAbund.4 = preds$treeAbund.4,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
+#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],slope=preds$slope,treeAbund.4 = preds$treeAbund.4)
+#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],herbAbund.4=preds$herbAbund.4,treeAbund.4 = preds$treeAbund.4,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
+#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],activity=preds$activity,plant_comunity.forest=preds$plant_comunity.forest,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
+GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],activity=preds$activity,soil_type.2=preds$soil_type.2,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
+```
+
+
+
+# Tuning of parameters
+bag.fraction: the fraction of the training set observations randomly selected to propose the next tree in the expansion
+shrinkage/learning.rate: Die „Lerngeschwindigkeit“ – betrifft die Gewichtung schlecht vorhergesagter Fälle für den nachfolgenden Baum. 
+interaction.depth/tree.complextity: Die „Tiefe“ der Bäume, d. h. die Anzahl der Ebenen. (Der Beispiel-Baum ganz oben enthält zwei Verzweigungsebenen.) 
+
+
+```{r}
+# create hyperparameter grid
+hyper_grid <- expand.grid(
+  learning.rate = c(0.001,0.005),
+  bag.fraction = c(.5,.65,.75), 
+  tree.complexity  = c(1,3,5),
+  optimal_trees = 0,                # a place to dump results
+  min_RMSE = 0,                     # a place to dump results
+  cv.deviance.mean = 0,             # a place to dump results
+  cv.deviance.se = 0,               # a place to dump results
+  cv.correlation.mean = 0,          # a place to dump results
+  cv.correlation.se = 0            # a place to dump results
+)
+```
+
+
+
+# Creation of gbms based on hypergrid for all seleceted neophytes and species richness
+Species richness based on 6 neophytes
+
+
+```{r}
+df=GbmPlantsPreds
+
+gbm.tune.result=list()
+bgm.family ="bernoulli" # for individual neophytes
+
+for(s in 1:6) {
+if(s %in% c(5,6)) {bgm.family = "poisson"}
+
+for(i in 1:nrow(hyper_grid)) {
+  
+  # reproducibility
+  set.seed(2020)
+  
+    # train model
+  gbm.tune <- gbm.step(
+    data=df, gbm.x = 7:ncol(df), gbm.y = s,
+    family = bgm.family,
+    learning.rate = hyper_grid$learning.rate[i],
+    bag.fraction = hyper_grid$bag.fraction[i],
+    tree.complexity = hyper_grid$tree.complexity[i],
+    n.folds=10,
+    verbose=F
+  )
+  
+  
+  hyper_grid$optimal_trees[i]       <- ifelse(is.null(gbm.tune$n.trees),NA , gbm.tune$n.trees) # which.min(gbm.tune$train.error) # =
+  hyper_grid$min_RMSE[i]            <- ifelse(is.null(sqrt(min(gbm.tune$train.error))),NA ,sqrt(min(gbm.tune$train.error)))
+  hyper_grid$cv.deviance.mean[i]    <- ifelse(is.null(gbm.tune$cv.statistics$deviance.mean),NA ,gbm.tune$cv.statistics$deviance.mean)
+  hyper_grid$cv.deviance.se[i]      <- ifelse(is.null(gbm.tune$cv.statistics$deviance.se),NA ,gbm.tune$cv.statistics$deviance.se)
+  hyper_grid$cv.correlation.mean[i] <- ifelse(is.null(gbm.tune$cv.statistics$correlation.mean),NA ,gbm.tune$cv.statistics$correlation.mean)
+  hyper_grid$cv.correlation.se[i]   <- ifelse(is.null(gbm.tune$cv.statistics$correlation.se),NA ,gbm.tune$cv.statistics$correlation.se)
+  hyper_grid$AUCtrain.mean[i]       <- ifelse(is.null(gbm.tune$cv.statistics$discrimination.mean),NA , gbm.tune$cv.statistics$discrimination.mean)
+  hyper_grid$AUCtrain.se[i]         <- ifelse(is.null(gbm.tune$cv.statistics$discrimination.se),NA , gbm.tune$cv.statistics$discrimination.se)
+
+}
+print(hyper_grid)
+
+#gbm.result = hyper_grid %>% arrange(-desc(min_RMSE)) %>% dplyr::filter(optimal_trees > 999)
+gbm.result= hyper_grid %>% arrange(-desc(min_RMSE)) 
+gbm.tune.result[[s]] = data.frame(gbm.result)
+}
+
+
+gbm.tune.result.df=as_tibble(data.frame(cbind(y=rep(1:6,each=nrow(gbm.tune.result[[1]])),plyr::rbind.fill(gbm.tune.result))))
+
+gbm.tune.result.tree1000 = gbm.tune.result.df %>% dplyr::filter(optimal_trees > 999)
+gbm.tune.result.1        = gbm.tune.result.tree1000 %>%  group_by(y) %>% filter(row_number()==1)
+gbm.tune.result.1
+
+cv.deviance.mean = gbm.tune.result.1$cv.deviance.mean
+cv.correlation.mean = gbm.tune.result.1$cv.correlation.mean
+AUCtrain.mean = gbm.tune.result.1$AUCtrain.mean
+
+
+GBMindv.cv.deviance.mean = round(mean(cv.deviance.mean[1:4]),2)
+GBMindv.cv.deviance.range  = paste("(",round(min(cv.deviance.mean[1:4]),2),",",round(max(cv.deviance.mean[1:4]),2),")",sep="")
+
+GBMindv.cv.correlation.mean = round(mean(cv.correlation.mean[1:4]),2)
+GBMindv.cv.correlation.range  = paste("(",round(min(cv.correlation.mean[1:4]),2),",",round(max(cv.correlation.mean[1:4]),2,")",sep="")
+
+
+GBMindv.AUCtrain.mean =  round(mean(AUCtrain.mean[1:4]),2)
+GBMindv.AUCtrain.range  = paste("(",round(min(AUCtrain.mean[1:4]),2),",",round(max(AUCtrain.mean[1:4]),2),")",sep="")
+
+
+GBMdeviance = cbind(mean=GBMindv.cv.deviance.mean,range=GBMindv.cv.deviance.range,
+      devMEM1=round(cv.deviance.mean[5],2),devMEM2=round(cv.deviance.mean[6],2))
+GBMcorr = cbind(mean=GBMindv.cv.correlation.mean,range=GBMindv.cv.correlation.range,
+      corrMEM1=round(cv.correlation.mean[5],2),MEM2=round(cv.correlation.mean[6],2))
+GBMauc = cbind(mean=GBMindv.AUCtrain.mean,range=GBMindv.AUCtrain.range,"","")
+
+
+GBMresult=data.frame(rbind(GBMdeviance,GBMcorr,GBMauc))
+GBMresult
+
+```
+
+> gbm.tune.result.1
+# A tibble: 7 x 10
+# Groups:   y [7]
+      y learning.rate bag.fraction tree.complexity optimal_trees min_RMSE cv.deviance.mean cv.deviance.se cv.correlation.mean cv.correlation.se
+  <int>         <dbl>        <dbl>           <dbl>         <dbl>    <dbl>            <dbl>          <dbl>               <dbl>             <dbl>
+1     1        0.001          0.75               3          1600    0.799            0.730         0.0402              0.179             0.0629
+2     2        0.001          0.75               5          1000    0.628            0.463         0.0437              0.0710            0.0543
+3     3        0.0005         0.75               5          1000    0.654            0.461         0.0400              0.198             0.109 
+4     4        0.001          0.75               1          2650    0.756            0.618         0.0648              0.224             0.0914
+5     5        0.001          0.75               5          4550    0.808            0.753         0.125               0.747             0.0666
+6     6        0.005          0.75               1          1450    0.727            0.624         0.0739              0.453             0.0880
+7     7        0.001          0.75               3          1300    1.18             1.13          0.259               0.539             0.0652
+
+# Running gbms with selected tuning parameter
+
+```{r}
+df=GbmPlantsPreds
+
+type=colnames(plants)
+final.gbm = tibble(type,  learning.rate = 0, bag.fraction = 0, tree.complexity = 0,optimal_trees = 0, 
+                          min_RMSE = 0, 
+                          cv.deviance.mean = 0, cv.deviance.se = 0,
+                          cv.correlation.mean = 0, cv.correlation.se = 0,
+                          AUCtrain.mean = 0,AUCtrain.se = 0
+                    )
+
+## Cyn.dac
+i=1 # which response?
+
+# settings as defined in  gbm.tune.result.1.row
+learning.rate = gbm.tune.result.1.row$learning.rate[i]; final.gbm$learning.rate[i] = learning.rate
+tree.complexity = gbm.tune.result.1.row$tree.complexity[i]; final.gbm$tree.complexity[i] = tree.complexity
+bag.fraction = gbm.tune.result.1.row$bag.fraction[i];final.gbm$bag.fraction[i] = bag.fraction
+
+set.seed(2020)
+final.gbm.plant1 <- gbm.step(data=df, gbm.x = 8:ncol(df), gbm.y = i,
+                        family = "bernoulli", tree.complexity = tree.complexity,
+                        learning.rate = learning.rate, bag.fraction = bag.fraction,n.folds=10,verbose=T)
+
+
+
+
+
+  final.gbm$optimal_trees[i]       <- final.gbm.plant1$n.trees # which.min(final.gbm.plant1$train.error) # =
+  final.gbm$min_RMSE[i]            <- sqrt(min(final.gbm.plant1$train.error))
+  final.gbm$cv.deviance.mean[i]    <- final.gbm.plant1$cv.statistics$deviance.mean
+  final.gbm$cv.deviance.se[i]      <- final.gbm.plant1$cv.statistics$deviance.se
+  final.gbm$cv.correlation.mean[i] <- final.gbm.plant1$cv.statistics$correlation.mean
+  final.gbm$cv.correlation.se[i]   <- final.gbm.plant1$cv.statistics$correlation.se
+  final.gbm$AUCtrain.mean[i]       <- final.gbm.plant1$cv.statistics$discrimination.mean
+  final.gbm$AUCtrain.se[i]         <- final.gbm.plant1$cv.statistics$discrimination.se
+
+  
+
+
+  
+#Eup.hir
+i=2 # which response?
+
+# settings as defined in  gbm.tune.result.1.row
+learning.rate = gbm.tune.result.1.row$learning.rate[i]; final.gbm$learning.rate[i] = learning.rate
+tree.complexity = gbm.tune.result.1.row$tree.complexity[i]; final.gbm$tree.complexity[i] = tree.complexity
+bag.fraction = gbm.tune.result.1.row$bag.fraction[i];final.gbm$bag.fraction[i] = bag.fraction
+
+
+set.seed(2020)
+final.gbm.plant1 <- gbm.step(data=df, gbm.x = 8:ncol(df), gbm.y = i,
+                        family = "bernoulli", tree.complexity = tree.complexity,
+                        learning.rate = learning.rate, bag.fraction = bag.fraction,n.folds=10,verbose=T)
+
+
+
+
+
+  final.gbm$optimal_trees[i]       <- final.gbm.plant1$n.trees # which.min(final.gbm.plant1$train.error) # =
+  final.gbm$min_RMSE[i]            <- sqrt(min(final.gbm.plant1$train.error))
+  final.gbm$cv.deviance.mean[i]    <- final.gbm.plant1$cv.statistics$deviance.mean
+  final.gbm$cv.deviance.se[i]      <- final.gbm.plant1$cv.statistics$deviance.se
+  final.gbm$cv.correlation.mean[i] <- final.gbm.plant1$cv.statistics$correlation.mean
+  final.gbm$cv.correlation.se[i]   <- final.gbm.plant1$cv.statistics$correlation.se
+  final.gbm$AUCtrain.mean[i]       <- final.gbm.plant1$cv.statistics$discrimination.mean
+  final.gbm$AUCtrain.se[i]         <- final.gbm.plant1$cv.statistics$discrimination.se
+  
+
+#Meg.max
+i=3 # which response?
+
+# settings as defined in  gbm.tune.result.1.row
+learning.rate = gbm.tune.result.1.row$learning.rate[i]; final.gbm$learning.rate[i] = learning.rate
+tree.complexity = gbm.tune.result.1.row$tree.complexity[i]; final.gbm$tree.complexity[i] = tree.complexity
+bag.fraction = gbm.tune.result.1.row$bag.fraction[i];final.gbm$bag.fraction[i] = bag.fraction
+
+
+set.seed(2020)
+final.gbm.plant1 <- gbm.step(data=df, gbm.x = 8:ncol(df), gbm.y = i,
+                        family = "bernoulli", tree.complexity = tree.complexity,
+                        learning.rate = learning.rate, bag.fraction = bag.fraction,n.folds=10,verbose=T)
+
+
+
+
+
+  final.gbm$optimal_trees[i]       <- final.gbm.plant1$n.trees # which.min(final.gbm.plant1$train.error) # =
+  final.gbm$min_RMSE[i]            <- sqrt(min(final.gbm.plant1$train.error))
+  final.gbm$cv.deviance.mean[i]    <- final.gbm.plant1$cv.statistics$deviance.mean
+  final.gbm$cv.deviance.se[i]      <- final.gbm.plant1$cv.statistics$deviance.se
+  final.gbm$cv.correlation.mean[i] <- final.gbm.plant1$cv.statistics$correlation.mean
+  final.gbm$cv.correlation.se[i]   <- final.gbm.plant1$cv.statistics$correlation.se
+  final.gbm$AUCtrain.mean[i]       <- final.gbm.plant1$cv.statistics$discrimination.mean
+  final.gbm$AUCtrain.se[i]         <- final.gbm.plant1$cv.statistics$discrimination.se
+  
+
+#Ric.com  
+i=4 # which response?
+
+# settings as defined in  gbm.tune.result.1.row
+learning.rate = gbm.tune.result.1.row$learning.rate[i]; final.gbm$learning.rate[i] = learning.rate
+tree.complexity = gbm.tune.result.1.row$tree.complexity[i]; final.gbm$tree.complexity[i] = tree.complexity
+bag.fraction = gbm.tune.result.1.row$bag.fraction[i];final.gbm$bag.fraction[i] = bag.fraction
+
+
+set.seed(2020)
+final.gbm.plant1 <- gbm.step(data=df, gbm.x = 8:ncol(df), gbm.y = i,
+                        family = "bernoulli", tree.complexity = tree.complexity,
+                        learning.rate = learning.rate, bag.fraction = bag.fraction,n.folds=10,verbose=T)
+
+
+
+
+
+  final.gbm$optimal_trees[i]       <- final.gbm.plant1$n.trees # which.min(final.gbm.plant1$train.error) # =
+  final.gbm$min_RMSE[i]            <- sqrt(min(final.gbm.plant1$train.error))
+  final.gbm$cv.deviance.mean[i]    <- final.gbm.plant1$cv.statistics$deviance.mean
+  final.gbm$cv.deviance.se[i]      <- final.gbm.plant1$cv.statistics$deviance.se
+  final.gbm$cv.correlation.mean[i] <- final.gbm.plant1$cv.statistics$correlation.mean
+  final.gbm$cv.correlation.se[i]   <- final.gbm.plant1$cv.statistics$correlation.se
+  final.gbm$AUCtrain.mean[i]       <- final.gbm.plant1$cv.statistics$discrimination.mean
+  final.gbm$AUCtrain.se[i]         <- final.gbm.plant1$cv.statistics$discrimination.se
+  
+  
+# species richness using selected neophytes
+i=5 # which response?
+
+# settings as defined in  gbm.tune.result.1.row
+learning.rate = gbm.tune.result.1.row$learning.rate[i]; final.gbm$learning.rate[i] = learning.rate
+tree.complexity = gbm.tune.result.1.row$tree.complexity[i]; final.gbm$tree.complexity[i] = tree.complexity
+bag.fraction = gbm.tune.result.1.row$bag.fraction[i];final.gbm$bag.fraction[i] = bag.fraction
+
+
+set.seed(2020)
+final.gbm.plant1 <- gbm.step(data=df, gbm.x = 8:ncol(df), gbm.y = i,
+                        family = "poisson", tree.complexity = tree.complexity,
+                        learning.rate = learning.rate, bag.fraction = bag.fraction,n.folds=10,verbose=T)
+
+
+
+
+
+  final.gbm$optimal_trees[i]       <- final.gbm.plant1$n.trees # which.min(final.gbm.plant1$train.error) # =
+  final.gbm$min_RMSE[i]            <- sqrt(min(final.gbm.plant1$train.error))
+  final.gbm$cv.deviance.mean[i]    <- final.gbm.plant1$cv.statistics$deviance.mean
+  final.gbm$cv.deviance.se[i]      <- final.gbm.plant1$cv.statistics$deviance.se
+  final.gbm$cv.correlation.mean[i] <- final.gbm.plant1$cv.statistics$correlation.mean
+  final.gbm$cv.correlation.se[i]   <- final.gbm.plant1$cv.statistics$correlation.se
+  final.gbm$AUCtrain.mean[i]       <- NA
+  final.gbm$AUCtrain.se[i]         <- NA
+   
+  
+
+# species richness using all neophytes
+i=6 # which response?
+
+# settings as defined in  gbm.tune.result.1.row
+learning.rate = gbm.tune.result.1.row$learning.rate[i]; final.gbm$learning.rate[i] = learning.rate
+tree.complexity = gbm.tune.result.1.row$tree.complexity[i]; final.gbm$tree.complexity[i] = tree.complexity
+bag.fraction = gbm.tune.result.1.row$bag.fraction[i];final.gbm$bag.fraction[i] = bag.fraction
+
+
+set.seed(2020)
+final.gbm.plant1 <- gbm.step(data=df, gbm.x = 8:ncol(df), gbm.y = i,
+                        family = "poisson", tree.complexity = tree.complexity,
+                        learning.rate = learning.rate, bag.fraction = bag.fraction,n.folds=10,verbose=T)
+
+
+
+
+
+  final.gbm$optimal_trees[i]       <- final.gbm.plant1$n.trees # which.min(final.gbm.plant1$train.error) # =
+  final.gbm$min_RMSE[i]            <- sqrt(min(final.gbm.plant1$train.error))
+  final.gbm$cv.deviance.mean[i]    <- final.gbm.plant1$cv.statistics$deviance.mean
+  final.gbm$cv.deviance.se[i]      <- final.gbm.plant1$cv.statistics$deviance.se
+  final.gbm$cv.correlation.mean[i] <- final.gbm.plant1$cv.statistics$correlation.mean
+  final.gbm$cv.correlation.se[i]   <- final.gbm.plant1$cv.statistics$correlation.se
+  final.gbm$AUCtrain.mean[i]       <- NA
+  final.gbm$AUCtrain.se[i]         <- NA
+  
+  
+  
+```
+
+
+
+
+
+
+save
+ gbm.tune.result.1.row,
+final.gbm.plant1,
+final.gbm.plant
+
+
+
+
+
+
+
+# Influence of environment on individual selected neophytes
+
+
+## plant 1
+
+
+```{r}
+df=GbmPlantsPreds
+
+# grid search 
+for(i in 1:nrow(hyper_grid)) {
+  
+  # reproducibility
+  set.seed(2020)
+  
+    # train model
+  gbm.tune <- gbm.step(
+    data=df, gbm.x = 8:23, gbm.y = 1,
+    family = "bernoulli",
+    tree.complexity = 1,
+    learning.rate = hyper_grid$learning.rate[i],
+    bag.fraction = hyper_grid$bag.fraction[i],
+    #bag.fraction = 0.5,
+    n.folds=10,verbose=F
+  )
+  
+  
+  hyper_grid$optimal_trees[i]       <- gbm.tune$n.trees # which.min(gbm.tune$train.error) # =
+  hyper_grid$min_RMSE[i]            <- sqrt(min(gbm.tune$train.error))
+  hyper_grid$cv.deviance.mean[i]    <- gbm.tune$cv.statistics$deviance.mean
+  hyper_grid$cv.deviance.se[i]      <- gbm.tune$cv.statistics$deviance.se
+  hyper_grid$cv.correlation.mean[i] <- gbm.tune$cv.statistics$correlation.mean
+  hyper_grid$cv.correlation.se[i]   <- gbm.tune$cv.statistics$correlation.se
+}
+
+plant1.gbm.tune = hyper_grid %>% arrange(-desc(min_RMSE))
+ 
+```
+
+Best select BGM with lowest RMSE has a learning rate of 0.005, bag= 0.75,a tree complexity of 1 with 1950 trees.
+
+
+
+
+```{r}
+df=BgmPlantsPreds
+
+set.seed(2020)
+final.gbm.plant1 <- gbm.step(data=df, gbm.x = 8:23, gbm.y = 1,
+                        family = "bernoulli", tree.complexity = 1,
+                        learning.rate = 0.001, bag.fraction = 0.75,n.folds=10,verbose=T)
+
+
+
+gbm.plot.fits(final.gbm.MEM)
+
+
+
+df2 <- summary(final.gbm.MEM) %>% 
+  dplyr::rename("variable" = var) %>% 
+  dplyr::arrange(rel.inf) %>%
+  dplyr::mutate(variable = forcats::fct_inorder(variable))
+
+ggplot2::ggplot(df2) +
+  geom_col(aes(x = variable, y = rel.inf),
+           col = "black", show.legend = F) +
+  coord_flip() +
+  scale_fill_grey() +
+  theme_bw()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

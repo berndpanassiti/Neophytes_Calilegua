@@ -1,0 +1,245 @@
+---
+title: "workingdata"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+load("data/rawdata.RData")
+library(magrittr)
+library(dplyr)
+library(labdsv) #matrify
+library(simba) #bb2num
+library(tidyr)
+library(vegan)
+library(BiodiversityR)
+```
+
+
+# aspect value
+http://ecology.msu.montana.edu/labdsv/R/labs/lab2/lab2.html
+
+```{r}
+sites$aspect=(cos((sites$exposure-30)/180*pi)+1)/2
+```
+
+
+
+
+
+Reshape species matrix and convert to percent
+
+```{r}
+# https://stackoverflow.com/questions/50691393/transform-community-data-into-wide-format-for-vegan-package
+#df = species %>% select(plot_id,species,cover)
+#dat.bb = matrify(as.matrix(df))
+
+
+
+
+
+df = neophytes %>% select(site_id,ring,plot_id,species,cover)
+#dat.bb = df %>% reshape2::dcast(df, site_id+ring+plot_id~species,value.var="count")
+#dat.bb = df %>% reshape2::dcast(df, site_id+ring+plot_id~species,value.var="count")
+dat.bb = df %>% tidyr::spread(key=species,value=cover)
+
+dat.bb= dat.bb %>% mutate_at(c(4:17), ~replace(., is.na(.), 0)) # NO factors before!
+
+neophytesPlotPercent=dat.bb
+neophytesPlotPercent[,4:17]= bb2num(neophytesPlotPercent[,4:17], from = c("*", "1", "2", "3", "4", "5"), to = c(0.5, 2.5, 15, 37.5, 62.5, 87.5))
+```
+
+
+
+
+
+In which plots were not found any neophytes?
+```{r}
+# 1 check if all plots of neophytes are present in sites
+#neophytes[which(!neophytes$plot_id %in% sites$plot_id),]
+
+# 2 Generate 0 for all plots with no neofites records
+sites[which(!sites$plot_id %in% neophytes$plot_id),]
+
+siteNoNeophytes = sites[which(!sites$plot_id %in% neophytesPlotPercent$plot_id),1:3]
+NoNeophytes= neophytesPlotPercent[1:nrow(siteNoNeophytes),-c(1:3)]
+NoNeophytes[NoNeophytes>0]=0
+df= data.frame(cbind(siteNoNeophytes,NoNeophytes))
+colnames(df)=colnames(neophytesPlotPercent)
+neophytesPlotPercentinclAbsences=rbind(neophytesPlotPercent,df)
+
+
+#diversitycomp(dune, y = dune.env, factor1 = 'Management', index = 'richness', method = 'all')
+```
+
+
+
+
+# Species accumulation curves
+```{r}
+df=data.frame(neophytesPlotPercentinclAbsences[,-c(1:3)])
+df[df>0]=1
+df2=data.frame(data.frame(neophytesPlotPercentinclAbsences[,c(1:3)]))
+df2$ring=as.factor(df2$ring)
+plot=accumcomp(df, y = df2, factor = 'ring', method = 'exact')
+```
+
+plot=accumcomp(df[1:20,], y = sites[1:20,], factor = 'ring', method = 'exact')
+
+
+iNext
+```{r}
+# number of species per ring
+df= neophytes %>%  dplyr::select(site_id,ring,species) %>%
+  group_by(site_id,ring) %>%          # Then, with the filtered data, group it by "bb"
+  dplyr::summarise(N_neophytes = n_distinct(species))
+
+ggplot(df,aes(x=ring,y=N_neophytes))+geom_boxplot()
+
+
+
+ringNneophytes=reshape::cast(df,ring~site_id)
+df= ringNneophytes
+ringNneophytes = mutate(ringNneophytes, across(everything(), ~replace_na(.x, 0)))
+rownames(ringNneophytes) = ringNneophytes[,1]
+colnamesringNneophytes = colnames(ringNneophytes)[-1]
+ringNneophytes = data.frame(ringNneophytes[,-1])
+colnames(ringNneophytes) = colnamesringNneophytes
+
+S <- specnumber(ringNneophytes) # observed number of species
+(raremax <- min(rowSums(ringNneophytes)))
+Srare <- rarefy(ringNneophytes, raremax)
+plot(S, Srare, xlab = "Observed No. of Species", ylab = "Rarefied No. of Species")
+abline(0, 1)
+rarecurve(ringNneophytes, step = 1, sample = raremax, col = "blue", cex = 0.6)
+
+ringNneophytesList = list()
+ringNneophytesList[["ring1"]]=ringNneophytes[1,]
+ringNneophytesList[["ring2"]]=ringNneophytes[2,]
+ringNneophytesList[["ring3"]]=ringNneophytes[3,]
+ringNneophytesList[["ring4"]]=ringNneophytes[4,]
+ringNneophytesList[["ref"]]=ringNneophytes[5,]
+
+
+out <- iNEXT(ringNneophytesList, q=0, datatype="incidence_freq")
+ggiNEXT(out, type=1, facet.var="site")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Summarize (mean) for 1) site and b) ring
+```{r}
+sitesSpecies = inner_join(sites, speciesPercent, by = c("site_id", "ring","plot_id"))
+dat=sitesSpecies %>% dplyr::select(-site_id,-plot_id,-date) %>% group_by(ring,zone,activity) %>% summarise_all("mean")
+
+# with reference sites: nObs: 24; plants: 14
+veg = dat %>% ungroup()  %>% select(-ring,-zone,-activity)
+env = dat %>% select(ring,zone,activity)
+
+# without reference sites: nObs: 22; plants: 14
+veg_exRef = dat %>% filter(ring != 'ref') %>% ungroup()  %>% select(-ring,-zone,-activity)
+env_exRef = dat %>% filter(ring != 'ref')  %>% select(ring,zone,activity)
+```
+
+
+
+
+
+# As factor
+```{r}
+#species= species%>% mutate_at(c("site_id","ring","species","family","habitus","cover"),as.factor)
+```
+
+
+# Rarefaction
+```{r}
+plantOcc=plantOccSite[,-1]
+S <- specnumber(plantOcc) # observed number of species
+plantOcc=data.frame(plantOcc[-which(S<4),])
+S <- specnumber(plantOcc) # observed number of species
+(raremax <- min(rowSums(plantOcc)))
+Srare <- rarefy(plantOcc, raremax)
+plot(S, Srare, xlab = "Observed No. of Species", ylab = "Rarefied No. of Species")
+abline(0, 1)
+rarecurve(plantOcc, col = "blue", cex = 0.6)
+
+
+
+
+
+
+
+
+
+
+S <- specnumber(s) # observed number of species
+ss=data.frame(s[-which(S<2),])
+S <- specnumber(ss) # observed number of species
+(raremax <- min(rowSums(ss)))
+Srare <- rarefy(ss, raremax)
+plot(S, Srare, xlab = "Observed No. of Species", ylab = "Rarefied No. of Species")
+abline(0, 1)
+rarecurve(ss, col = "blue", cex = 0.6)
+
+
+
+
+
+data(BCI)
+S <- specnumber(BCI) # observed number of species
+(raremax <- min(rowSums(BCI)))
+Srare <- rarefy(BCI, raremax)
+plot(S, Srare, xlab = "Observed No. of Species", ylab = "Rarefied No. of Species")
+abline(0, 1)
+rarecurve(BCI, step = 20, sample = raremax, col = "blue", cex = 0.6)
+```
+
+
+
+
+
+# Diversity
+```{r}
+# Diversity per site
+s=neophytesPlotPercent[,4:17]
+s[s>0]=1 # function sign
+plants=as_tibble(cbind(neophytesPlotPercent[,1],s))
+plantOccSite=plants %>% dplyr::group_by(site_id) %>% summarise_all("max")
+
+
+
+
+plantDiversitySite = plantOccSite[,1]
+plantDiversitySite$Cover_neophytes = 
+plantDiversitySite$N_neophytes=apply(plantOccSite[,-c(1)],1,sum)
+
+```
+
+
+
+
+
+```{r}
+save(
+  species,speciesPercent,
+  veg,env,veg_exRef,env_exRef,
+  file="data/workingdata.RData"
+)
+```
+
