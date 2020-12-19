@@ -10,15 +10,14 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
+source("r-code/00_functions.R")
 load("data/rawdata.RData")
-library(magrittr)
-library(dplyr)
-library(labdsv) #matrify
-library(simba) #bb2num
-library(tidyr)
-library(vegan)
-library(BiodiversityR)
+using("magrittr","dplyr","labdsv", "simba","tidyr","vegan","BiodiversityR","hablar","caret") 
+# simba: #bb2num
+# hablar:retype(), simplyfiing object into the following classes: date, numeric and character
+# labdsv: matrify
 ```
+
 
 
 # aspect value
@@ -26,9 +25,20 @@ http://ecology.msu.montana.edu/labdsv/R/labs/lab2/lab2.html
 
 ```{r}
 sites$aspect=(cos((sites$exposure-30)/180*pi)+1)/2
+sites$aspect[which(is.na(sites$aspect))]= 0.5 # neither hot or cold
 ```
 
 
+# abbreviate vegetation names
+```{r}
+library(fuzzySim)
+neophytes$plants <- fuzzySim::spCodes(neophytes$species, sep.species = " ", 
+nchar.gen = 3, nchar.sp = 3, nchar.ssp = 0, sep.spcode = ".")
+
+#sapply(taxonomy$species,nchar) # number of chars for entires name
+taxonomy$plants<- fuzzySim::spCodes(taxonomy$species, sep.species = " ", 
+nchar.gen = 1, nchar.sp = 20, nchar.ssp = 0, sep.spcode = ".")
+```
 
 
 
@@ -39,26 +49,20 @@ Reshape species matrix and convert to percent
 #df = species %>% select(plot_id,species,cover)
 #dat.bb = matrify(as.matrix(df))
 
-
-
-
-
-df = neophytes %>% select(site_id,ring,plot_id,species,cover)
+df = neophytes %>% dplyr::select(site_id,ring,plot_id,plants,cover)
 #dat.bb = df %>% reshape2::dcast(df, site_id+ring+plot_id~species,value.var="count")
 #dat.bb = df %>% reshape2::dcast(df, site_id+ring+plot_id~species,value.var="count")
-dat.bb = df %>% tidyr::spread(key=species,value=cover)
+dat.bb = df %>% tidyr::spread(key=plants,value=cover)
 
-dat.bb= dat.bb %>% mutate_at(c(4:17), ~replace(., is.na(.), 0)) # NO factors before!
+dat.bb= dat.bb %>% dplyr::mutate_at(c(4:17), ~replace(., is.na(.), 0)) # NO factors before!
 
 neophytesPlotPercent=dat.bb
 neophytesPlotPercent[,4:17]= bb2num(neophytesPlotPercent[,4:17], from = c("*", "1", "2", "3", "4", "5"), to = c(0.5, 2.5, 15, 37.5, 62.5, 87.5))
 ```
 
 
-
-
-
-In which plots were not found any neophytes?
+# Creation of full dataset: veg
+veg dataset incudes also plots with no neophytes
 ```{r}
 # 1 check if all plots of neophytes are present in sites
 #neophytes[which(!neophytes$plot_id %in% sites$plot_id),]
@@ -71,174 +75,90 @@ NoNeophytes= neophytesPlotPercent[1:nrow(siteNoNeophytes),-c(1:3)]
 NoNeophytes[NoNeophytes>0]=0
 df= data.frame(cbind(siteNoNeophytes,NoNeophytes))
 colnames(df)=colnames(neophytesPlotPercent)
-neophytesPlotPercentinclAbsences=rbind(neophytesPlotPercent,df)
+veg=rbind(neophytesPlotPercent,df)
 
 
-#diversitycomp(dune, y = dune.env, factor1 = 'Management', index = 'richness', method = 'all')
+# scale continous environmental variables
+env=sites %>% dplyr::select(-exposure)
+env %<>% hablar::retype() 
+cols=c("ring","zone","activity","plant_comunity","soil_coverage","soil_type","foliage","humus","cement","leak","waste","treeAbund","shrubAbund","herbAbund")
+env %<>% dplyr::mutate_each_(funs(factor(.)),cols)
+
+
+env[,-1] = env[,-1] %>% dplyr::mutate_if(is.numeric, function(x, na.rm = FALSE) as.numeric(scale(x)))
 ```
 
 
 
 
-# Species accumulation curves
+## Presences per site
 ```{r}
-df=data.frame(neophytesPlotPercentinclAbsences[,-c(1:3)])
-df[df>0]=1
-df2=data.frame(data.frame(neophytesPlotPercentinclAbsences[,c(1:3)]))
-df2$ring=as.factor(df2$ring)
-plot=accumcomp(df, y = df2, factor = 'ring', method = 'exact')
-```
-
-plot=accumcomp(df[1:20,], y = sites[1:20,], factor = 'ring', method = 'exact')
-
-
-iNext
-```{r}
-# number of species per ring
-df= neophytes %>%  dplyr::select(site_id,ring,species) %>%
-  group_by(site_id,ring) %>%          # Then, with the filtered data, group it by "bb"
-  dplyr::summarise(N_neophytes = n_distinct(species))
-
-ggplot(df,aes(x=ring,y=N_neophytes))+geom_boxplot()
-
-
-
-ringNneophytes=reshape::cast(df,ring~site_id)
-df= ringNneophytes
-ringNneophytes = mutate(ringNneophytes, across(everything(), ~replace_na(.x, 0)))
-rownames(ringNneophytes) = ringNneophytes[,1]
-colnamesringNneophytes = colnames(ringNneophytes)[-1]
-ringNneophytes = data.frame(ringNneophytes[,-1])
-colnames(ringNneophytes) = colnamesringNneophytes
-
-S <- specnumber(ringNneophytes) # observed number of species
-(raremax <- min(rowSums(ringNneophytes)))
-Srare <- rarefy(ringNneophytes, raremax)
-plot(S, Srare, xlab = "Observed No. of Species", ylab = "Rarefied No. of Species")
-abline(0, 1)
-rarecurve(ringNneophytes, step = 1, sample = raremax, col = "blue", cex = 0.6)
-
-ringNneophytesList = list()
-ringNneophytesList[["ring1"]]=ringNneophytes[1,]
-ringNneophytesList[["ring2"]]=ringNneophytes[2,]
-ringNneophytesList[["ring3"]]=ringNneophytes[3,]
-ringNneophytesList[["ring4"]]=ringNneophytes[4,]
-ringNneophytesList[["ref"]]=ringNneophytes[5,]
-
-
-out <- iNEXT(ringNneophytesList, q=0, datatype="incidence_freq")
-ggiNEXT(out, type=1, facet.var="site")
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Summarize (mean) for 1) site and b) ring
-```{r}
-sitesSpecies = inner_join(sites, speciesPercent, by = c("site_id", "ring","plot_id"))
-dat=sitesSpecies %>% dplyr::select(-site_id,-plot_id,-date) %>% group_by(ring,zone,activity) %>% summarise_all("mean")
-
-# with reference sites: nObs: 24; plants: 14
-veg = dat %>% ungroup()  %>% select(-ring,-zone,-activity)
-env = dat %>% select(ring,zone,activity)
-
-# without reference sites: nObs: 22; plants: 14
-veg_exRef = dat %>% filter(ring != 'ref') %>% ungroup()  %>% select(-ring,-zone,-activity)
-env_exRef = dat %>% filter(ring != 'ref')  %>% select(ring,zone,activity)
-```
-
-
-
-
-
-# As factor
-```{r}
-#species= species%>% mutate_at(c("site_id","ring","species","family","habitus","cover"),as.factor)
-```
-
-
-# Rarefaction
-```{r}
-plantOcc=plantOccSite[,-1]
-S <- specnumber(plantOcc) # observed number of species
-plantOcc=data.frame(plantOcc[-which(S<4),])
-S <- specnumber(plantOcc) # observed number of species
-(raremax <- min(rowSums(plantOcc)))
-Srare <- rarefy(plantOcc, raremax)
-plot(S, Srare, xlab = "Observed No. of Species", ylab = "Rarefied No. of Species")
-abline(0, 1)
-rarecurve(plantOcc, col = "blue", cex = 0.6)
-
-
-
-
-
-
-
-
-
-
-S <- specnumber(s) # observed number of species
-ss=data.frame(s[-which(S<2),])
-S <- specnumber(ss) # observed number of species
-(raremax <- min(rowSums(ss)))
-Srare <- rarefy(ss, raremax)
-plot(S, Srare, xlab = "Observed No. of Species", ylab = "Rarefied No. of Species")
-abline(0, 1)
-rarecurve(ss, col = "blue", cex = 0.6)
-
-
-
-
-
-data(BCI)
-S <- specnumber(BCI) # observed number of species
-(raremax <- min(rowSums(BCI)))
-Srare <- rarefy(BCI, raremax)
-plot(S, Srare, xlab = "Observed No. of Species", ylab = "Rarefied No. of Species")
-abline(0, 1)
-rarecurve(BCI, step = 20, sample = raremax, col = "blue", cex = 0.6)
-```
-
-
-
-
-
-# Diversity
-```{r}
-# Diversity per site
 s=neophytesPlotPercent[,4:17]
 s[s>0]=1 # function sign
 plants=as_tibble(cbind(neophytesPlotPercent[,1],s))
-plantOccSite=plants %>% dplyr::group_by(site_id) %>% summarise_all("max")
-
-
-
-
-plantDiversitySite = plantOccSite[,1]
-plantDiversitySite$Cover_neophytes = 
-plantDiversitySite$N_neophytes=apply(plantOccSite[,-c(1)],1,sum)
-
+vegSite=plants %>% dplyr::group_by(site_id) %>% summarise_all("max")
 ```
 
+
+
+
+# preparation of datasets for statistical analyses: presence of 6 neophytes (<5%) + species richness (total number)
+- presence/absence of neophytes
+- total number of neophytes
+
+
+
+
+```{r}
+s=veg[,4:ncol(veg)]
+s[s>0]=1 # function sign
+NtotalNeophytes=apply(s,1,sum) # total number of all neophytes
+
+
+
+s=vegan::specnumber(t(veg[,4:17]))
+# > s
+#          Arundo donax      Cynodon dactylon          Cyperus iria       Eleusine indica       Euphorbia hirta    Leonurus japonicus 
+#                     3                    18                     9                     9                    14                     1 
+# Leucaena leucocephala   Megathyrsus maximus       Melilotus albus       Psidium guajava      Ricinus communis         Sonchus asper 
+#                     1                    78                     2                     1                    18                     2 
+#    Sorghum halepensis  Tithonia tubaeformis 
+#                     3                     1 
+
+df=round(s/nrow(veg)*100,2)
+df
+#          Arundo donax      Cynodon dactylon          Cyperus iria       Eleusine indica       Euphorbia hirta    Leonurus japonicus 
+#                  2.10                 12.59                  6.29                  6.29                  9.79                  0.70 
+# Leucaena leucocephala   Megathyrsus maximus       Melilotus albus       Psidium guajava      Ricinus communis         Sonchus asper 
+#                  0.70                 54.55                  1.40                  0.70                 12.59                  1.40 
+#    Sorghum halepensis  Tithonia tubaeformis 
+#                  2.10                  0.70 
+
+df[df>9]
+Cyn.dac Eup.hir Meg.max Ric.com 
+  12.59    9.79   54.55   12.59
+
+selectedNeophytes =veg %>% dplyr::select(site_id,ring,plot_id,names(df[df>9]))
+
+
+# presences and total richness for selected neophytes
+s=selectedNeophytes[,4:ncol(selectedNeophytes)]
+s[s>0]=1 # function sign
+NfreqNeophytes=apply(s,1,sum) # total number of selected neophytes
+
+
+plants = as_tibble(cbind(s,NfreqNeophytes,NtotalNeophytes))
+```
 
 
 
 
 ```{r}
 save(
-  species,speciesPercent,
-  veg,env,veg_exRef,env_exRef,
+  neophytes,neophytesPlotPercent,
+  sites,taxonomy,
+  veg,env,vegEnv,vegSite,
+  plants,
   file="data/workingdata.RData"
 )
 ```

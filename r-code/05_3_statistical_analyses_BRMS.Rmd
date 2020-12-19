@@ -56,89 +56,236 @@ fit[[s]] <- brm(y ~ ring.1 + ring.2 + ring.3 + ring.4 + activity+soil_type.2 + p
 
 
 lapply(fit, function(x)summary(x))
-```
 
-```{r}
+# 10 fold cv
 for (i in 1:6){
 set.seed(2020)
-fit[[i]] <- brms::add_criterion(fit[[i]], c("loo", "bayes_R2","loo_R2"))
-assign(paste("fit",i,".loo",sep=""),fit[[i]])
+  # use the future package for parallelization
+#library(future)
+#plan(multiprocess)
+  fit.kfold=kfold(fit[[i]],  save_fits = TRUE)
+assign(paste("fit.kfold",i,"",sep=""),fit.kfold)
 }
 
-#variance_decomposition:
-#variance_decomposition(fit[[1]],robust = TRUE)
-
-# loo
-looEst1 = fit1.loo$criteria$loo$estimates[3,1]
-looEst2 = fit2.loo$criteria$loo$estimates[3,1]
-looEst3 = fit3.loo$criteria$loo$estimates[3,1]
-looEst4 = fit4.loo$criteria$loo$estimates[3,1]
-
-
-
-LOOICind.mean = mean(c(looEst1,looEst2,looEst3,looEst4))
-LOOICind.min = min(c(looEst1,looEst2,looEst3,looEst4))
-LOOICind.max = max(c(looEst1,looEst2,looEst3,looEst4))
-LOOICind.mean;LOOICind.min;LOOICind.max
-fit5.loo$criteria$loo$estimates[3,1];fit6.loo$criteria$loo$estimates[3,1]
-
-# loo_R2
-# loo
-r2Est1 = mean(fit1.loo$criteria$bayes_R2)
-r2Est2 = mean(fit2.loo$criteria$bayes_R2)
-r2Est3 = mean(fit3.loo$criteria$bayes_R2)
-r2Est4 = mean(fit4.loo$criteria$bayes_R2)
-
-
-
-r2ind.mean = mean(c(r2Est1,r2Est2,r2Est3,r2Est4))
-r2ind.min = min(c(r2Est1,r2Est2,r2Est3,r2Est4))
-r2ind.max = max(c(r2Est1,r2Est2,r2Est3,r2Est4))
-r2ind.mean;r2ind.min;r2ind.max
-mean(fit5.loo$criteria$bayes_R2);mean(fit6.loo$criteria$bayes_R2)
-
-
-
+fit.kfold = NULL
+fit.kfold = list(fit.kfold1,fit.kfold2,fit.kfold3,fit.kfold4,fit.kfold5,fit.kfold6)
 ```
 
+# Get 10cv performance criteria: Looic, Bayes R2
 ```{r}
+brms.perfCritera = data.frame(matrix(0,ncol=10,nrow=6))
+colnames(brms.perfCritera) = c("model",
+                               "looic.mean","looic.min","looic.max",
+                               "bayes_R2.mean","bayes_R2.min","bayes_R2.max",
+                               "AUC.mean","AUC.min","AUC.max")
+brmLooicFold=rep(NA,10) # looic
+brmR2Fold=rep(NA,10) # R2
+brmAUCFold=rep(NA,10)
+
+
+nFolds=10
 for (i in 1:6){
-  set.seed(2020)
+kfold.m = fit.kfold[[i]]
 
-kfold1 <- kfold(fit[[i]],  save_fits = TRUE)
-assign(paste("fit",i,".10fold",sep=""),fit[[i]])
+
+ for(f in 1:Nfolds){
+   
+### AUC ### for binomial single SDM
+    if(i<5){
+      y = kfold.m$fits[[f]]$data$y
+set.seed(2020)
+brmAUCFold[f]=as.numeric(pROC::roc(response = y, predictor =  predict(kfold.m$fits[[f]],type = "response")[ , "Estimate"], plot = FALSE, print.auc = TRUE)$auc)
+    }
+   # looic & R2
+   kfold.m$fits[[f]] <- brms::add_criterion(kfold.m$fits[[f]], c("loo", "bayes_R2","loo_R2"))   
+   brmLooicFold[f] = kfold.m$fits[[f]]$criteria$loo$estimates[3,1] # looic
+   brmR2Fold[f] = mean(kfold.m$fits[[f]]$criteria$bayes_R2,na.rm=T) # R2
+  }
+
+brms.perfCritera$model[i]=i
+brms.perfCritera$looic.mean[i]= mean(brmLooicFold,na.rm=T)
+brms.perfCritera$looic.min[i] = min(brmLooicFold,na.rm=T)
+brms.perfCritera$looic.max[i] = max(brmLooicFold,na.rm=T)
+
+brms.perfCritera$bayes_R2.mean[i] = mean(brmR2Fold,na.rm=T)
+brms.perfCritera$bayes_R2.min[i]  = min(brmR2Fold,na.rm=T)
+brms.perfCritera$bayes_R2.max[i]  = max(brmR2Fold,na.rm=T)
+
+if(i<5){
+  brms.perfCritera$AUC.mean[i]= mean(brmAUCFold,na.rm=T)
+  brms.perfCritera$AUC.max[i] = max(brmAUCFold,na.rm=T)
+  brms.perfCritera$AUC.min[i] = min(brmAUCFold,na.rm=T)
+  }
 }
 
-
-fit[[i]] <- brms::add_criterion(fit[[i]], c("loo", "bayes_R2","loo_R2"))
+brms.perfCritera
 ```
 
 
+# s-SDM
+## extract predictions from individual folds for 4 selected neophytes
+```{r}
+obsfitted.folds= list()
+nFolds=10
+for (i in 1:4){ # 4 single SDMs
+kfold.m = fit.kfold[[i]]
+
+ for(f in 1:Nfolds){
+      y = kfold.m$fits[[f]]$data$y
+      set.seed(2020)
+      p = predict(kfold.m$fits[[f]],type = "response")[,"Estimate"]
+      site_id=kfold.m$fits[[f]]$data$site_id
+      obsfitted.folds[[f]]=data.frame(site_id,y,fitted=p)
+ }
+
+assign(paste("neophyte",i,".obsfitted.folds",sep=""),obsfitted.folds)
+}
+
+brms.fittedValues.10folds.selectedNeophytes = list(neophyte1.obsfitted.folds,neophyte2.obsfitted.folds,neophyte3.obsfitted.folds,neophyte4.obsfitted.folds)
+```
 
 ```{r}
-# perform 10-fold cross validation
-set.seed(2020)
-kfold1 <- kfold(fit[[1]],  save_fits = TRUE)
-
-test=brms::add_criterion(kfold1$fits[[1]], c("loo", "bayes_R2","loo_R2"))
-predict(kfold1$fits[[1]],type = "response")
+fittedValues = brms.fittedValues.10folds.selectedNeophytes # results from gbm models
 
 
-brmAUC=rep(0,4)
+
+ss.fit=data.frame(matrix(0,nrow=143,ncol=9))
+colnames(ss.fit)=c("site_id","sp1.obs","sp1.preval","sp2.obs","sp2.preval","sp3.obs","sp3.preval","sp4.obs","sp4.preval")
+
+
+sf.fit = rep(NA,8)
+Nsf.fit = rep(1:4,each=2)
+for (o in 1:143){
 for (s in 1:4){
-  set.seed(2020)
-  fittedData = fit[[s]]
-  y = GbmPlantsPreds[,s]
-  # Using the pROC package
-brmAUC[s]=as.numeric(pROC::roc(response = y, predictor = predict(fittedData, type = "response")[ , "Estimate"], plot = FALSE, print.auc = TRUE)$auc)
-}
-mean(brmAUC);min(brmAUC);max(brmAUC)
+dat=dplyr::bind_rows(lapply(1:10,function(f) data.frame(fittedValues[[s]][[f]][fittedValues[[s]][[f]]$site_id==o,])))
+sf.fit[which(Nsf.fit==s)]=c(dat$y[1],mean(dat$fitted,na.rm=T))}
+ss.fit[o,]=c(o,rbind(sf.fit))}
 
+ss.fit=na.omit(ss.fit)
+brms.ss.fit = ss.fit
 ```
 
 
 
 ```{r}
-save(fit,file="data/result.brms.RData")
+ss.fit = brms.ss.fit
+Cindex = rep(0,nrow(ss.fit))
+for (s in 1:nrow(ss.fit)){
+# get obs and fitted from folds
+# observation used in fold for all four species
+obs.SR=c(ss.fit$sp1.obs[s],ss.fit$sp2.obs[s],ss.fit$sp3.obs[s],ss.fit$sp4.obs[s])
+
+# Probability for each species to occur at the site(s)/prevalence
+sp.preval=c(ss.fit$sp1.preval[s],ss.fit$sp2.preval[s],ss.fit$sp3.preval[s],ss.fit$sp4.preval[s])
+ 
+
+
+# print(all.equal((fitted(m)), predict(m,type="response")))
+PresSpecies=which(obs.SR==1)
+AbsSpecies=which(obs.SR==0)
+
+
+obsPres =length(which(obs.SR==1))
+obsAbs =length(which(obs.SR==0))
+Pairs=obsPres*obsAbs
+if (Pairs>0){
+  Combinations=data.frame(crossing(PresSpecies,AbsSpecies))
+  Comparisons = rep(0,nrow(Combinations))
+
+  for(i in 1:nrow(Combinations)){if(sp.preval[Combinations[i,1]]>sp.preval[Combinations[i,2]]){Comparisons[i]=1}}
+  Cindex[s] = sum(Comparisons)/Pairs
+  }
+if (Pairs==0){Cindex[s] = NA}
+
+}
+  
+  
+mean(as.vector(na.omit(Cindex)))
+sd(as.vector(na.omit(Cindex)))
+range(as.vector(na.omit(Cindex)))
+brms.Cindex = Cindex
+```
+
+
+
+```{r}
+ss.fit = brms.ss.fit
+
+sp.pool = 4 # species to occur at a site (Regional species pool)
+
+
+simSR.selectedNeophytesSiteFold = as_tibble(data.frame(matrix(0,ncol=5,nrow=nrow(ss.fit))))
+colnames(simSR.selectedNeophytesSiteFold)=c("species","site_id","obsSR","realSR","expectedSR")
+
+loopN = rep(1:nrow(ss.fit),each=4)
+
+# Tests:
+#sp.pool <- round(runif(1, min=50, max=100)) #Random number of potental species to occur at a site (Regional species pool
+#sp.preval <- round(runif(sp.pool, min=0, max=1), 3) #Random probability for each species to occur at the site(s)/prevalence
+
+rep <- 1000 #Number of times the binomial distribution is drawn to create the "observed" species richness
+run=1
+for (s in 1:nrow(ss.fit)){
+# get obs and fitted from folds
+# observation used in fold for all four species
+obs.SR=c(ss.fit$sp1.obs[s],ss.fit$sp2.obs[s],ss.fit$sp3.obs[s],ss.fit$sp4.obs[s])
+
+# Probability for each species to occur at the site(s)/prevalence
+sp.preval=c(ss.fit$sp1.preval[s],ss.fit$sp2.preval[s],ss.fit$sp3.preval[s],ss.fit$sp4.preval[s])
+ 
+
+
+
+#Site parameters calculation based on the input data
+#expected.SR.sum <- sum(sp.preval) #The expected species richness
+set.seed(2020)
+expected.SR <- poibin::dpoibin(1:sp.pool, sp.preval) #The expected probability for all possible SR from 1 to sp.pool based on sp.preval
+
+#Simple model to create n=rep, realisations of the probability distribution
+obs.SR.binom <- NULL
+for(i in 1:rep){
+  set.seed(2020)
+  obs.SR.binom <- c(obs.SR.binom, sum(rbinom(sp.pool,1,sp.preval)))
+}
+#Histogram of the observed SR based on independent Bernoulli trials
+SR.hist <- hist(obs.SR.binom, breaks=0:sp.pool) # max. sp.pool species can occur in hist()
+SR.hist$counts <- SR.hist$counts/rep #Standardisation with the number of repetition
+real.obs.SR = SR.hist$counts
+
+simSR.selectedNeophytesSite[which(loopN==run),] = cbind(1:4,rep(s,4),obs.SR,real.obs.SR,expected.SR)
+run=run+1
+
+}
+
+
+
+# WITH REAL OBS (sim with rbinom): 10 folds representiv for site = 1 (obs 1)
+corSR.selectedNeophytesSite = simSR.selectedNeophytesSite %>% dplyr::select(site_id,realSR,expectedSR) %>% dplyr::group_by(site_id) %>% dplyr::summarise(corSR=cor(realSR,expectedSR))
+# final results for 128 sites - based on 143 with 10 folds cv
+mean(corSR.selectedNeophytesSite$corSR)
+range(corSR.selectedNeophytesSite$corSR)
+
+
+# WITH observed OBS: 10 folds representiv for site = 1 (obs 1)
+corSR.selectedNeophytesSite = simSR.selectedNeophytesSite %>% dplyr::select(site_id,obsSR,expectedSR) %>% dplyr::group_by(site_id) %>% dplyr::summarise(corSR=ifelse(var(obsSR)==0,NA,abs(cor(obsSR,expectedSR))))
+
+# final results for 128 sites - based on 143 with 10 folds cv
+mean(corSR.selectedNeophytesSite$corSR,na.rm=T)
+range(corSR.selectedNeophytesSite$corSR,na.rm=T)
+
+
+brms.simSR.selectedNeophytesSite = simSR.selectedNeophytesSite # save
+
+```
+
+
+
+
+
+
+```{r}
+save(fit.kfold,brms.perfCritera,
+     brms.Cindex,brms.simSR.selectedNeophytesSite,
+     file="data/result.brms.RData")
 ```
 

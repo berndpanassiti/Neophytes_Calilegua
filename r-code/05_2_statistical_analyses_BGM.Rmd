@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 source("r-code/00_functions.R")
 load("data/workingdata.RData")
-using("ggplot2","tidyverse","purrr","dplyr","broom","knitr","dismo","skimr","caret")
+using("ggplot2","tidyverse","purrr","dplyr","broom","knitr","dismo","skimr","caret","poibin")
 
 rm(.Random.seed, envir=globalenv())
 set.seed(2020)
@@ -35,37 +35,15 @@ dat = preds %>% dplyr::select(ring) # colSums(is.na(df))
 dummies_model <- caret::dummyVars( ~ ., data=dat)
 
 # Create the dummy variables using predict. The Y variable (Purchase) will not be present in trainData_mat.
-GBMpreds <- data.frame(predict(dummies_model, newdata = dat))
-#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],slope=preds$slope,treeAbund.4 = preds$treeAbund.4,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
+rings <- data.frame(predict(dummies_model, newdata = dat))
 
-#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],activity=preds$activity,slope=preds$slope,treeAbund.4 = preds$treeAbund.4)
-# plant1 ony 1 model that does not converge
+# activity
+activity=as.character(preds$activity)
+activity[activity=="inactive"]=0
+activity[activity=="active"]=1
+activity=as.numeric(activity)
+GBMpreds = data.frame(rings[,-5],activity=activity,soil_type.2=preds$soil_type.2,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
 
-#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],activity=preds$activity,slope=preds$slope,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
-# no models for plant2
-
-#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],activity=preds$activity,treeAbund.4 = preds$treeAbund.4,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
-# plant1 only 1 model and that model does not converge
-
-#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],activity=preds$activity,plant_comunity.forest=preds$plant_comunity.forest,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
-# plant 1 does not converge
-
-GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],activity=preds$activity,soil_type.2=preds$soil_type.2,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
-# plants 2 does not converge!
-
-#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],activity=preds$activity,herbAbund.4=preds$herbAbund.4,plant_comunity.shrubs=preds$plant_comunity.shrubs)
-# plants 1 and 2 with at least 2 warnings  glm.fit: fitted probabilities numerically 0 or 1 occurred and sometimes, glm.fit: algorithm did not converge
-
-#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],activity=preds$activity,herbAbund.4=preds$herbAbund.4,plant_comunity.shrubs=preds$plant_comunity.shrubs)
-# plants 1 and 2 with at least 2 warnings  glm.fit: fitted probabilities numerically 0 or 1 occurred and sometimes, glm.fit: algorithm did not converge
-
-
-#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],activity=preds$activity,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
-# no convergence for both plants
-
-
-#GbmPlantsPreds = data.frame(plants,GBMpreds[,-5],activity=preds$activity,soil_type.4=preds$soil_type.4,plant_comunity.altered.forest=preds$plant_comunity.altered.forest)
-# plant2 with no models
 ```
 
 
@@ -82,8 +60,8 @@ interaction.depth/tree.complextity: Die „Tiefe“ der Bäume, d. h. die Anzahl
 ```{r}
 # create hyperparameter grid
 hyper_grid <- expand.grid(
-  learning.rate = c(0.0001,0.0005,0.001),
-  bag.fraction = c(.5,.65,.75), 
+  learning.rate = c(0.0001,0.005,0.001,0.01),
+  bag.fraction = c(.5,.65,.75,1), 
   tree.complexity  = c(1,3,5),
   optimal_trees = 0,                # a place to dump results
   min_RMSE = 0,                     # a place to dump results
@@ -101,15 +79,13 @@ Species richness based on 6 neophytes
 
 
 ```{r}
-df=GbmPlantsPreds
+df=data.frame(plants[,3:6],GBMpreds)
 
 gbm.tune.result=list()
 bgm.family ="bernoulli" # for individual neophytes
 
-for(s in 3:6) {
- if(s %in% c(5,6)) {bgm.family = "poisson"}
-
-#for(s in 1:2) {
+for(s in 1:4) {
+ if(s %in% c(3,4)) {bgm.family = "poisson"}
  
 
 for(i in 1:nrow(hyper_grid)) {
@@ -146,83 +122,194 @@ gbm.tune.result[[s]] = data.frame(gbm.result)
 }
 
 
-gbm.tune.result.df=as_tibble(data.frame(cbind(y=rep(1:6,each=nrow(gbm.tune.result[[1]])),plyr::rbind.fill(gbm.tune.result))))
+gbm.tune.result.df=as_tibble(data.frame(cbind(y=rep(3:6,each=nrow(gbm.tune.result[[1]])),plyr::rbind.fill(gbm.tune.result)))) # plants 1 and 2 omitted
 gbm.tune.result.tree1000 = gbm.tune.result.df %>% dplyr::filter(optimal_trees > 999)
+#gbm.tune.result.df=as_tibble(data.frame(cbind(y=rep(1:6,each=nrow(gbm.tune.result[[1]])),plyr::rbind.fill(gbm.tune.result))))
+#gbm.tune.result.tree1000 = gbm.tune.result.df %>% dplyr::filter(optimal_trees > 999)
 ```
 
 
 
 
-
 ```{r}
-df=GbmPlantsPreds
-
-# plant1
-s=1
-
-set.seed(2020)     # reproducibility
-    # train model
-  gbm.tune <- gbm.step(
-    data=df, gbm.x = 7:ncol(df), gbm.y = s,
-    family = bgm.family,
-    learning.rate = 0.001,
-    bag.fraction = 0.7,
-    tree.complexity = 5,
-    n.folds=10,
-    verbose=F
-)
-# soil.2 ok
-  
- 
-# plant1
-s=2
-
-set.seed(2020)     # reproducibility
-    # train model
-  gbm.tune <- gbm.step(
-    data=df, gbm.x = 7:ncol(df), gbm.y = s,
-    family = bgm.family,
-    learning.rate = 0.00001,
-    bag.fraction = 1,
-    tree.complexity = 5,
-    n.folds=10,
-    verbose=F
-)
-# soil.2 with 2 wwarings glm.fit: fitted probabilities numerically 0 or 1 occurred
-```
-
-
-
-
-
-
-
-## Recheck parameter values for models with warnings
-
-Warning messages:
-1: glm.fit: algorithm did not converge 
-2: glm.fit: fitted probabilities numerically 0 or 1 occurred 
-
-
-```{r}
-df=GbmPlantsPreds
-bgm.family ="bernoulli" # for individual neophytes
-
-gbm.tune.result.1 = as_tibble(data.frame(matrix(0,ncol=12,nrow=7)))
+gbm.tune.result.1 = data.frame(matrix(0,ncol=12,nrow=6))
+names(gbm.tune.result.1) = names(gbm.tune.result.tree1000)
 colnames(gbm.tune.result.1) = colnames(gbm.tune.result.tree1000)
-
 fittedValues = as_tibble(data.frame(matrix(0,ncol=4,nrow=143)))
 
 # plant1
 s=1
-tuneParameters=gbm.tune.result.tree1000[gbm.tune.result.tree1000$y==s,]
+df=data.frame(plants[,s],GBMpreds)
 
-tuneParameter=tuneParameters[28,] # test individual settings!
+set.seed(2020)     # reproducibility
+  gbm.tune <- gbm.step(
+    data=df, gbm.x = 2:ncol(df), gbm.y = 1,
+    family = "bernoulli",
+    learning.rate = 0.0001,
+    bag.fraction = 0.7,
+    tree.complexity = 5,
+    n.folds=10,
+    verbose=F,
+    keep.fold.models = TRUE, keep.fold.vector = TRUE, keep.fold.fit = TRUE
+)
+# soil.2 ok
+learning.rate    = gbm.tune$shrinkage
+bag.fraction     = gbm.tune$bag.fraction
+tree.complexity  = gbm.tune$interaction.depth
+optimal_trees           <- ifelse(is.null(gbm.tune$n.trees),NA , gbm.tune$n.trees) # which.min(gbm.tune$train.error) # =
+min_RMSE                <- ifelse(is.null(sqrt(min(gbm.tune$train.error))),NA ,sqrt(min(gbm.tune$train.error)))
+cv.deviance.mean        <- ifelse(is.null(gbm.tune$cv.statistics$deviance.mean),NA ,gbm.tune$cv.statistics$deviance.mean)
+cv.deviance.se          <- ifelse(is.null(gbm.tune$cv.statistics$deviance.se),NA ,gbm.tune$cv.statistics$deviance.se)
+cv.correlation.mean     <- ifelse(is.null(gbm.tune$cv.statistics$correlation.mean),NA ,gbm.tune$cv.statistics$correlation.mean)
+cv.correlation.se       <- ifelse(is.null(gbm.tune$cv.statistics$correlation.se),NA ,gbm.tune$cv.statistics$correlation.se)
+AUCtrain.mean           <- ifelse(is.null(gbm.tune$cv.statistics$discrimination.mean),NA , gbm.tune$cv.statistics$discrimination.mean)
+AUCtrain.se             <- ifelse(is.null(gbm.tune$cv.statistics$discrimination.se),NA , gbm.tune$cv.statistics$discrimination.se)
+
+gbm.tune.result.1[s,] = c(s,learning.rate,bag.fraction,tree.complexity,optimal_trees,min_RMSE,cv.deviance.mean,cv.deviance.se,
+                          cv.correlation.mean,cv.correlation.se,AUCtrain.mean,AUCtrain.se)
+fittedValues[,s] = gbm.tune$fitted 
+ 
+# save fitted values of 10 folds - 1 neophyte
+for (i in 1:10){
+  fold<- paste("fold", sprintf("%02d", i), sep = "_")
+  assign(fold,data.frame(cbind(site_id=as.numeric(names(gbm.tune$fold.models[[i]]$data$y)),
+    y=gbm.tune$fold.models[[i]]$data$y,fitted=plogis(gbm.tune$fold.models[[i]]$fit))))
+}
+neophyte1.obsfitted.folds = list(fold_01,fold_02,fold_03,fold_04,fold_05,fold_06,fold_07,fold_08,fold_09,fold_10)
+
+
+
+# plant2
+s=2
+df=data.frame(y=plants[,s],GBMpreds)
+
 set.seed(2020)     # reproducibility
     # train model
   gbm.tune <- gbm.step(
-    data=df, gbm.x = 7:ncol(df), gbm.y = s,
-    family = bgm.family,
+    data=df, gbm.x = 2:ncol(df), gbm.y = 1,
+    family = "bernoulli",
+    learning.rate = 0.00001,
+    bag.fraction = 1,
+    tree.complexity = 5,
+    n.folds=10,
+    verbose=F,
+    keep.fold.models = TRUE, keep.fold.vector = TRUE, keep.fold.fit = TRUE
+)
+  
+learning.rate    = gbm.tune$shrinkage
+bag.fraction     = gbm.tune$bag.fraction
+tree.complexity  = gbm.tune$interaction.depth
+optimal_trees           <- ifelse(is.null(gbm.tune$n.trees),NA , gbm.tune$n.trees) # which.min(gbm.tune$train.error) # =
+min_RMSE                <- ifelse(is.null(sqrt(min(gbm.tune$train.error))),NA ,sqrt(min(gbm.tune$train.error)))
+cv.deviance.mean        <- ifelse(is.null(gbm.tune$cv.statistics$deviance.mean),NA ,gbm.tune$cv.statistics$deviance.mean)
+cv.deviance.se          <- ifelse(is.null(gbm.tune$cv.statistics$deviance.se),NA ,gbm.tune$cv.statistics$deviance.se)
+cv.correlation.mean     <- ifelse(is.null(gbm.tune$cv.statistics$correlation.mean),NA ,gbm.tune$cv.statistics$correlation.mean)
+cv.correlation.se       <- ifelse(is.null(gbm.tune$cv.statistics$correlation.se),NA ,gbm.tune$cv.statistics$correlation.se)
+AUCtrain.mean           <- ifelse(is.null(gbm.tune$cv.statistics$discrimination.mean),NA , gbm.tune$cv.statistics$discrimination.mean)
+AUCtrain.se             <- ifelse(is.null(gbm.tune$cv.statistics$discrimination.se),NA , gbm.tune$cv.statistics$discrimination.se)
+
+
+  
+# soil.2 with 2 wwarings glm.fit: fitted probabilities numerically 0 or 1 occurred
+gbm.tune.result.1[s,] = c(s,learning.rate,bag.fraction,tree.complexity,optimal_trees,min_RMSE,cv.deviance.mean,cv.deviance.se,
+                          cv.correlation.mean,cv.correlation.se,AUCtrain.mean,AUCtrain.se)
+fittedValues[,s] = gbm.tune$fitted 
+
+# save fitted values of 10 folds - 2 neophyte
+for (i in 1:10){
+  fold<- paste("fold", sprintf("%02d", i), sep = "_")
+  assign(fold,data.frame(cbind(site_id=as.numeric(names(gbm.tune$fold.models[[i]]$data$y)),
+    y=gbm.tune$fold.models[[i]]$data$y,fitted=plogis(gbm.tune$fold.models[[i]]$fit))))
+}
+neophyte2.obsfitted.folds = list(fold_01,fold_02,fold_03,fold_04,fold_05,fold_06,fold_07,fold_08,fold_09,fold_10)
+
+
+# plant3
+s=3
+df=data.frame(plants[,s],GBMpreds)
+tuneParameters=gbm.tune.result.tree1000[gbm.tune.result.tree1000$y==s,]
+
+tuneParameter=tuneParameters[1,] # test individual settings!
+set.seed(2020)     # reproducibility
+    # train model
+  gbm.tune <- gbm.step(
+    data=df, gbm.x = 2:ncol(df), gbm.y = 1,
+    family = "bernoulli",
+    learning.rate = tuneParameter$learning.rate,
+    bag.fraction = tuneParameter$bag.fraction,
+    tree.complexity = tuneParameter$tree.complexity,
+    n.folds=10,
+    verbose=F,
+    keep.fold.models = TRUE, keep.fold.vector = TRUE, keep.fold.fit = TRUE
+)
+# soil.2 with 4 wwarings glm.fit: fitted probabilities numerically 0 or 1 occurred
+gbm.tune.result.1[s,] = tuneParameter
+fittedValues[,s] = gbm.tune$fitted
+
+
+# save fitted values of 10 folds - 3 neophyte
+for (i in 1:10){
+  fold<- paste("fold", sprintf("%02d", i), sep = "_")
+  assign(fold,data.frame(cbind(site_id=as.numeric(names(gbm.tune$fold.models[[i]]$data$y)),
+    y=gbm.tune$fold.models[[i]]$data$y,fitted=plogis(gbm.tune$fold.models[[i]]$fit))))
+}
+neophyte3.obsfitted.folds = list(fold_01,fold_02,fold_03,fold_04,fold_05,fold_06,fold_07,fold_08,fold_09,fold_10)
+
+
+
+# plant4
+s=4
+df=data.frame(plants[,s],GBMpreds)
+
+tuneParameters=gbm.tune.result.tree1000[gbm.tune.result.tree1000$y==s,]
+
+tuneParameter=tuneParameters[5,] # test individual settings!
+set.seed(2020)     # reproducibility
+    # train model
+  gbm.tune <- gbm.step(
+    data=df, gbm.x = 7:ncol(df), gbm.y = 1,
+    family = "bernoulli",
+    learning.rate = tuneParameter$learning.rate,
+    bag.fraction = tuneParameter$bag.fraction,
+    tree.complexity = tuneParameter$tree.complexity,
+    n.folds=10,
+    verbose=F,
+    keep.fold.models = TRUE, keep.fold.vector = TRUE, keep.fold.fit = TRUE
+)
+# soil.2 with 4 wwarings glm.fit: fitted probabilities numerically 0 or 1 occurred
+
+gbm.tune.result.1[s,] = tuneParameter
+fittedValues[,s] = gbm.tune$fitted
+
+
+# save fitted values of 10 folds - 4 neophyte
+for (i in 1:10){
+  fold<- paste("fold", sprintf("%02d", i), sep = "_")
+  assign(fold,data.frame(cbind(site_id=as.numeric(names(gbm.tune$fold.models[[i]]$data$y)),
+    y=gbm.tune$fold.models[[i]]$data$y,fitted=plogis(gbm.tune$fold.models[[i]]$fit))))
+}
+neophyte4.obsfitted.folds = list(fold_01,fold_02,fold_03,fold_04,fold_05,fold_06,fold_07,fold_08,fold_09,fold_10)
+
+
+
+
+
+
+
+#### MEMs ####
+
+
+# MEM1 species richness
+s=5
+df=data.frame(y=plants[,s],GBMpreds)
+tuneParameters=gbm.tune.result.tree1000[gbm.tune.result.tree1000$y==s,]
+
+tuneParameter=tuneParameters[1,] # test individual settings!
+set.seed(2020)     # reproducibility
+    # train model
+  gbm.tune <- gbm.step(
+    data=df, gbm.x = 2:ncol(df), gbm.y = 1,
+    family = "poisson",
     learning.rate = tuneParameter$learning.rate,
     bag.fraction = tuneParameter$bag.fraction,
     tree.complexity = tuneParameter$tree.complexity,
@@ -231,64 +318,241 @@ set.seed(2020)     # reproducibility
 )
 # ok!
 gbm.tune.result.1[s,] = tuneParameter
-fittedValues[,s] = gbm.tune$fitted
-  
 
-# plant2
-s=2
+# MEM2 species richness
+s=6
+df=data.frame(y=plants[,s],GBMpreds)
 tuneParameters=gbm.tune.result.tree1000[gbm.tune.result.tree1000$y==s,]
 
-tuneParameter=tuneParameters[15,] # test individual settings!
+tuneParameter=tuneParameters[1,] # test individual settings!
 set.seed(2020)     # reproducibility
     # train model
   gbm.tune <- gbm.step(
-    data=df, gbm.x = 7:ncol(df), gbm.y = s,
-    family = bgm.family,
-    learning.rate = 0.00001,
-    bag.fraction = 1,
-    tree.complexity = 5,
+    data=df, gbm.x = 2:ncol(df), gbm.y = 1,
+    family = "poisson",
+    learning.rate = tuneParameter$learning.rate,
+    bag.fraction = tuneParameter$bag.fraction,
+    tree.complexity = tuneParameter$tree.complexity,
     n.folds=10,
     verbose=F
 )
-# # A tibble: 1 x 12
-#       y learning.rate bag.fraction tree.complexity optimal_trees min_RMSE cv.deviance.mean cv.deviance.se cv.correlation.mean cv.correlation.se AUCtrain.mean AUCtrain.se
-#   <int>         <dbl>        <dbl>           <dbl>         <dbl>    <dbl>            <dbl>          <dbl>               <dbl>             <dbl>         <dbl>       <dbl>
-# 1     2       0.00001          1               5          1000    0.800            0.638         0.0448               0.115             0.100         0.635      0.0857
-
 # ok!
 gbm.tune.result.1[s,] = tuneParameter
-fittedValues[,s] = gbm.tune$fitted
-   
+gbm.fittedValues.selectedNeophytes = fittedValues
+gbm.fittedValues.10folds.selectedNeophytes = list(neophyte1.obsfitted.folds,neophyte2.obsfitted.folds,neophyte3.obsfitted.folds,neophyte4.obsfitted.folds)
+```
+
+
+
+
+```{r}
+fittedValues = gbm.fittedValues.10folds.selectedNeophytes # results from gbm models
+
+
+
+ss.fit=data.frame(matrix(0,nrow=143,ncol=9))
+colnames(ss.fit)=c("site_id","sp1.obs","sp1.preval","sp2.obs","sp2.preval","sp3.obs","sp3.preval","sp4.obs","sp4.preval")
+
+
+sf.fit = rep(NA,8)
+Nsf.fit = rep(1:4,each=2)
+for (o in 1:143){
+for (s in 1:4){
+dat=dplyr::bind_rows(lapply(1:10,function(f) data.frame(fittedValues[[s]][[f]][fittedValues[[s]][[f]]$site_id==o,])))
+sf.fit[which(Nsf.fit==s)]=c(dat$y[1],mean(dat$fitted,na.rm=T))}
+ss.fit[o,]=c(o,rbind(sf.fit))}
+
+ss.fit=na.omit(ss.fit)
+gbm.ss.fit = ss.fit
+```
+
+
+```{r}
+ss.fit = brms.ss.fit
+Cindex = rep(0,nrow(ss.fit))
+for (s in 1:nrow(ss.fit)){
+# get obs and fitted from folds
+# observation used in fold for all four species
+obs.SR=c(ss.fit$sp1.obs[s],ss.fit$sp2.obs[s],ss.fit$sp3.obs[s],ss.fit$sp4.obs[s])
+
+# Probability for each species to occur at the site(s)/prevalence
+sp.preval=c(ss.fit$sp1.preval[s],ss.fit$sp2.preval[s],ss.fit$sp3.preval[s],ss.fit$sp4.preval[s])
+ 
+
+
+# print(all.equal((fitted(m)), predict(m,type="response")))
+PresSpecies=which(obs.SR==1)
+AbsSpecies=which(obs.SR==0)
+
+
+obsPres =length(which(obs.SR==1))
+obsAbs =length(which(obs.SR==0))
+Pairs=obsPres*obsAbs
+if (Pairs>0){
+  Combinations=data.frame(crossing(PresSpecies,AbsSpecies))
+  Comparisons = rep(0,nrow(Combinations))
+
+  for(i in 1:nrow(Combinations)){if(sp.preval[Combinations[i,1]]>sp.preval[Combinations[i,2]]){Comparisons[i]=1}}
+  Cindex[s] = sum(Comparisons)/Pairs
+  }
+if (Pairs==0){Cindex[s] = NA}
+
+}
+  
+  
+mean(as.vector(na.omit(Cindex)))
+sd(as.vector(na.omit(Cindex)))
+range(as.vector(na.omit(Cindex)))
+gbm.Cindex = Cindex
+```
+
+
+
+```{r}
+ss.fit = gbm.ss.fit
+
+sp.pool = 4 # species to occur at a site (Regional species pool)
+
+
+simSR.selectedNeophytesSiteFold = as_tibble(data.frame(matrix(0,ncol=5,nrow=nrow(ss.fit))))
+colnames(simSR.selectedNeophytesSiteFold)=c("species","site_id","obsSR","realSR","expectedSR")
+
+loopN = rep(1:nrow(ss.fit),each=4)
+
+# Tests:
+#sp.pool <- round(runif(1, min=50, max=100)) #Random number of potental species to occur at a site (Regional species pool
+#sp.preval <- round(runif(sp.pool, min=0, max=1), 3) #Random probability for each species to occur at the site(s)/prevalence
+
+rep <- 1000 #Number of times the binomial distribution is drawn to create the "observed" species richness
+run=1
+for (s in 1:nrow(ss.fit)){
+# get obs and fitted from folds
+# observation used in fold for all four species
+obs.SR=c(ss.fit$sp1.obs[s],ss.fit$sp2.obs[s],ss.fit$sp3.obs[s],ss.fit$sp4.obs[s])
+
+# Probability for each species to occur at the site(s)/prevalence
+sp.preval=c(ss.fit$sp1.preval[s],ss.fit$sp2.preval[s],ss.fit$sp3.preval[s],ss.fit$sp4.preval[s])
+ 
+
+
+
+#Site parameters calculation based on the input data
+#expected.SR.sum <- sum(sp.preval) #The expected species richness
+set.seed(2020)
+expected.SR <- poibin::dpoibin(1:sp.pool, sp.preval) #The expected probability for all possible SR from 1 to sp.pool based on sp.preval
+
+#Simple model to create n=rep, realisations of the probability distribution
+obs.SR.binom <- NULL
+for(i in 1:rep){
+  set.seed(2020)
+  obs.SR.binom <- c(obs.SR.binom, sum(rbinom(sp.pool,1,sp.preval)))
+}
+#Histogram of the observed SR based on independent Bernoulli trials
+SR.hist <- hist(obs.SR.binom, breaks=0:sp.pool) # max. sp.pool species can occur in hist()
+SR.hist$counts <- SR.hist$counts/rep #Standardisation with the number of repetition
+real.obs.SR = SR.hist$counts
+
+simSR.selectedNeophytesSite[which(loopN==run),] = cbind(1:4,rep(s,4),obs.SR,real.obs.SR,expected.SR)
+run=run+1
+
+}
+
+
+
+# WITH REAL OBS (sim with rbinom): 10 folds representiv for site = 1 (obs 1)
+corSR.selectedNeophytesSite = simSR.selectedNeophytesSite %>% dplyr::select(site_id,realSR,expectedSR) %>% dplyr::group_by(site_id) %>% dplyr::summarise(corSR=cor(realSR,expectedSR))
+# final results for 128 sites - based on 143 with 10 folds cv
+mean(corSR.selectedNeophytesSite$corSR)
+range(corSR.selectedNeophytesSite$corSR)
+
+
+# WITH observed OBS: 10 folds representiv for site = 1 (obs 1)
+corSR.selectedNeophytesSite = simSR.selectedNeophytesSite %>% dplyr::select(site_id,obsSR,expectedSR) %>% dplyr::group_by(site_id) %>% dplyr::summarise(corSR=ifelse(var(obsSR)==0,NA,abs(cor(obsSR,expectedSR))))
+
+# final results for 128 sites - based on 143 with 10 folds cv
+mean(corSR.selectedNeophytesSite$corSR,na.rm=T)
+range(corSR.selectedNeophytesSite$corSR,na.rm=T)
+
+
+gbm.simSR.selectedNeophytesSite = simSR.selectedNeophytesSite # save
+
+```
+
+
+
+
+# Final table
+```{r}
+cv.deviance.mean = gbm.tune.result.1$cv.deviance.mean
+cv.correlation.mean = gbm.tune.result.1$cv.correlation.mean
+AUCtrain.mean = gbm.tune.result.1$AUCtrain.mean
+
+
+GBMindv.cv.deviance.mean = round(mean(cv.deviance.mean[1:4]),2)
+GBMindv.cv.deviance.sd  = paste("(",round(min(cv.deviance.mean[1:4]),2),")",sep="")
+
+GBMindv.cv.correlation.mean = round(mean(cv.correlation.mean[1:4]),2)
+GBMindv.cv.correlation.sd  = paste("(",round(sd(cv.correlation.mean[1:4]),2),")",sep="")
+
+
+GBMindv.AUCtrain.mean =  round(mean(AUCtrain.mean[1:4]),2)
+GBMindv.AUCtrain.sd  = paste("(",round(sd(AUCtrain.mean[1:4]),2),")",sep="")
+
+
+GBMdeviance = cbind(mean=GBMindv.cv.deviance.mean,sd=GBMindv.cv.deviance.sd,
+      MEM1=round(cv.deviance.mean[5],2),MEM2=round(cv.deviance.mean[6],2))
+GBMcorr = cbind(mean=GBMindv.cv.correlation.mean,sd=GBMindv.cv.correlation.sd,
+      MEM1=round(cv.correlation.mean[5],2),MEM2=round(cv.correlation.mean[6],2))
+GBMauc = cbind(mean=GBMindv.AUCtrain.mean,sd=GBMindv.AUCtrain.sd,"","")
+
+
+GBMresult=data.frame(rbind(GBMdeviance,GBMcorr,GBMauc))
+GBMresult
+
 ```
 
 
 
 
 
+```{r}
+gbm.tune.result.1
+
+cv.deviance.mean = gbm.tune.result.1$cv.deviance.mean
+cv.correlation.mean = gbm.tune.result.1$cv.correlation.mean
+AUCtrain.mean = gbm.tune.result.1$AUCtrain.mean
 
 
+GBMindv.cv.deviance.mean = round(mean(cv.deviance.mean[1:4]),2)
+GBMindv.cv.deviance.range  = paste("(",round(min(cv.deviance.mean[1:4]),2),",",round(max(cv.deviance.mean[1:4]),2),")",sep="")
+
+GBMindv.cv.correlation.mean = round(mean(cv.correlation.mean[1:4]),2)
+GBMindv.cv.correlation.range  = paste("(",round(min(cv.correlation.mean[1:4]),2),",",round(max(cv.correlation.mean[1:4]),2,")",sep="")
 
 
+GBMindv.AUCtrain.mean =  round(mean(AUCtrain.mean[1:4]),2)
+GBMindv.AUCtrain.range  = paste("(",round(min(AUCtrain.mean[1:4]),2),",",round(max(AUCtrain.mean[1:4]),2),")",sep="")
 
 
+GBMdeviance = cbind(mean=GBMindv.cv.deviance.mean,range=GBMindv.cv.deviance.range,
+      devMEM1=round(cv.deviance.mean[5],2),devMEM2=round(cv.deviance.mean[6],2))
+GBMcorr = cbind(mean=GBMindv.cv.correlation.mean,range=GBMindv.cv.correlation.range,
+      corrMEM1=round(cv.correlation.mean[5],2),MEM2=round(cv.correlation.mean[6],2))
+GBMauc = cbind(mean=GBMindv.AUCtrain.mean,range=GBMindv.AUCtrain.range,"","")
 
 
+GBMresult=data.frame(rbind(GBMdeviance,GBMcorr,GBMauc))
+GBMresult
+
+```
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+```{r}
+save(GBMresult,gbm.tune.result.1,
+gbm.fittedValues.selectedNeophytes,
+gbm.simSR.selectedNeophytesSite,gbm.Cindex,gbm.ss.fit,
+file="data/results.gbm.RData")
+```
 
 
 
