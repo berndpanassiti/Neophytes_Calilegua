@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 source("r-code/00_functions.R")
 load("data/rawdata.RData")
-using("magrittr","dplyr","labdsv", "simba","tidyr","vegan","BiodiversityR","hablar","caret") 
+using("magrittr","dplyr","labdsv", "simba","tidyr","vegan","BiodiversityR","hablar","caret","fuzzySim") 
 # simba: #bb2num
 # hablar:retype(), simplyfiing object into the following classes: date, numeric and character
 # labdsv: matrify
@@ -29,19 +29,6 @@ sites$aspect[which(is.na(sites$aspect))]= 0.5 # neither hot or cold
 ```
 
 
-# abbreviate vegetation names
-```{r}
-library(fuzzySim)
-neophytes$plants <- fuzzySim::spCodes(neophytes$species, sep.species = " ", 
-nchar.gen = 3, nchar.sp = 3, nchar.ssp = 0, sep.spcode = ".")
-
-#sapply(taxonomy$species,nchar) # number of chars for entires name
-taxonomy$plants<- fuzzySim::spCodes(taxonomy$species, sep.species = " ", 
-nchar.gen = 1, nchar.sp = 20, nchar.ssp = 0, sep.spcode = ".")
-```
-
-
-
 Reshape species matrix and convert to percent
 
 ```{r}
@@ -49,15 +36,13 @@ Reshape species matrix and convert to percent
 #df = species %>% select(plot_id,species,cover)
 #dat.bb = matrify(as.matrix(df))
 
-df = neophytes %>% dplyr::select(site_id,ring,plot_id,plants,cover)
-#dat.bb = df %>% reshape2::dcast(df, site_id+ring+plot_id~species,value.var="count")
-#dat.bb = df %>% reshape2::dcast(df, site_id+ring+plot_id~species,value.var="count")
-dat.bb = df %>% tidyr::spread(key=plants,value=cover)
+df = neophytes %>% dplyr::select(site_id,ring,plot_id,plant_id,cover)
+dat.bb = df %>% tidyr::spread(key=plant_id,value=cover)
 
-dat.bb= dat.bb %>% dplyr::mutate_at(c(4:17), ~replace(., is.na(.), 0)) # NO factors before!
+dat.bb= dat.bb %>% dplyr::mutate_at(c(4:ncol(dat.bb)), ~replace(., is.na(.), 0)) # NO factors before!
 
 neophytesPlotPercent=dat.bb
-neophytesPlotPercent[,4:17]= bb2num(neophytesPlotPercent[,4:17], from = c("*", "1", "2", "3", "4", "5"), to = c(0.5, 2.5, 15, 37.5, 62.5, 87.5))
+neophytesPlotPercent[,4:ncol(neophytesPlotPercent)]= bb2num(neophytesPlotPercent[,4:ncol(neophytesPlotPercent)], from = c("*", "1", "2", "3", "4", "5"), to = c(0.5, 2.5, 15, 37.5, 62.5, 87.5))
 ```
 
 
@@ -89,11 +74,35 @@ env[,-1] = env[,-1] %>% dplyr::mutate_if(is.numeric, function(x, na.rm = FALSE) 
 ```
 
 
+# Diversity - inverse Simpson
+## Simpson 
+Simpson’s Index (D) measures the probability that two individuals randomly selected from a sample will belong to the same species
+
+Simpson’s Reciprocal Index 1 / D. (D2)
+
+The value of this index starts with 1 as the lowest possible figure. This figure would represent a community containing one species. The higher the value, the greater the diversity. The maximum value is the number of species (or other category being used) in the sample. For example if there are five species in the sample, then the maximum value is 5.
+https://archetypalecology.wordpress.com/2018/02/20/biodiversity-indices-concepts-and-r-implementations-in-progress/
+
+```{r}
+df =veg[,-c(1:3)]
+df[df>0] =1
+Nneophytes = apply(df,1,sum)
+
+Pneophytes = rep(0,length(Nneophytes))
+Pneophytes[which(Nneophytes>0)] = 1
+
+Dneophytes = vegan::diversity(df, index="invsimpson")
+Dneophytes[which(is.infinite(Dneophytes))] = NA
+
+dat = data.frame(cbind(veg[,1:3],Pneophytes,Nneophytes,Dneophytes))
+vegEnv = as_tibble(dplyr::left_join(dat,env,by=c("site_id","ring","plot_id")))
+```
+
 
 
 ## Presences per site
 ```{r}
-s=neophytesPlotPercent[,4:17]
+s=neophytesPlotPercent[,4:ncol(neophytesPlotPercent)]
 s[s>0]=1 # function sign
 plants=as_tibble(cbind(neophytesPlotPercent[,1],s))
 vegSite=plants %>% dplyr::group_by(site_id) %>% summarise_all("max")
@@ -116,27 +125,19 @@ NtotalNeophytes=apply(s,1,sum) # total number of all neophytes
 
 
 
-s=vegan::specnumber(t(veg[,4:17]))
+s=vegan::specnumber(t(veg[,4:ncol(veg)]))
 # > s
-#          Arundo donax      Cynodon dactylon          Cyperus iria       Eleusine indica       Euphorbia hirta    Leonurus japonicus 
-#                     3                    18                     9                     9                    14                     1 
-# Leucaena leucocephala   Megathyrsus maximus       Melilotus albus       Psidium guajava      Ricinus communis         Sonchus asper 
-#                     1                    78                     2                     1                    18                     2 
-#    Sorghum halepensis  Tithonia tubaeformis 
-#                     3                     1 
+#Aru.don Cyn.dac Cyp.iri Ele.ind Eup.hir Leo.jap Leu.leu Meg.max Mel.alb Psi.gua Ric.com Son.asp Sor.hal 
+#      3      18       9       9      14       1       1      78       2       1      18       2       3
 
 df=round(s/nrow(veg)*100,2)
 df
-#          Arundo donax      Cynodon dactylon          Cyperus iria       Eleusine indica       Euphorbia hirta    Leonurus japonicus 
-#                  2.10                 12.59                  6.29                  6.29                  9.79                  0.70 
-# Leucaena leucocephala   Megathyrsus maximus       Melilotus albus       Psidium guajava      Ricinus communis         Sonchus asper 
-#                  0.70                 54.55                  1.40                  0.70                 12.59                  1.40 
-#    Sorghum halepensis  Tithonia tubaeformis 
-#                  2.10                  0.70 
+#Aru.don Cyn.dac Cyp.iri Ele.ind Eup.hir Leo.jap Leu.leu Meg.max Mel.alb Psi.gua Ric.com Son.asp Sor.hal 
+#   2.10   12.59    6.29    6.29    9.79    0.70    0.70   54.55    1.40    0.70   12.59    1.40    2.10
 
-df[df>9]
-Cyn.dac Eup.hir Meg.max Ric.com 
-  12.59    9.79   54.55   12.59
+# df[df>9]
+# Cyn.dac Eup.hir Meg.max Ric.com 
+#   12.59    9.79   54.55   12.59
 
 selectedNeophytes =veg %>% dplyr::select(site_id,ring,plot_id,names(df[df>9]))
 
@@ -157,6 +158,7 @@ plants = as_tibble(cbind(s,NfreqNeophytes,NtotalNeophytes))
 save(
   neophytes,neophytesPlotPercent,
   sites,taxonomy,
+  plantTraits,plantTraitsHierarchy,
   veg,env,vegEnv,vegSite,
   plants,
   file="data/workingdata.RData"

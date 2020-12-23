@@ -1,35 +1,22 @@
 ---
-title: "02_workingdata"
+title: "Hierarchical trait trees"
 output: pdf_document
 editor_options: 
   chunk_output_type: console
 ---
 
-Manipulating data.
-
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Introduction
+This document creates hierarchical trees of neophytes collected in the Calilegua National Park, Argentina.
 
-
-Printing tibble tables:
-options(tibble.width = 100,pillar.min_title_chars=Inf)# putput width, and no column name truncation
-print(insectOTU$data$tax_abund,n=40,n_extra=0)
-
-
-
-
+# Load data & functions
 ```{r}
+source("r-code/00_functions.R")
 load("data/workingdata.RData")
-
-library(tidyr)
-library(dplyr)
-library(tibble)
-library(taxa)
-library(metacoder)
-library(ggplot2)
+using("tidyr","dplyr","tibble","taxa","metacoder","ggplot2")
 ```
 
 
@@ -40,19 +27,16 @@ library(ggplot2)
 # veg_data$species = rownames(veg_data)
 
 veg_data = neophytes
-
-
-veg_data = dplyr::left_join(veg_data,taxonomy,by=c("species"="species"))
+veg_data = dplyr::left_join(veg_data,taxonomy,by=c("plant_id"="plant_id"))
 
 ```
 
 
 
 
-# Plotting taxonomic data
+# Heattrees
 
-## Heat tree using OTUs
-### Heat tree of OTU only Hemiptera (= 156 OTUs)
+## Heat tree using plant taxonomy
 ```{r}
 NeophytesTaxmap_Cover =parse_tax_data(veg_data,
                class_cols = "taxonomy",
@@ -63,10 +47,7 @@ print(NeophytesTaxmap_Cover)
 ```
 
 ```{r}
-# Heat tree of Hemiptera OTUs
-load("data/insectOTU.RData") # needs to be loaded every time
-
-set.seed(1) 
+set.seed(2020) 
 NeophytesTaxmap_Cover %>%
 heat_tree(node_label = taxon_names,
           node_color = n_obs,
@@ -76,18 +57,29 @@ heat_tree(node_label = taxon_names,
 ```
 
 
-### Heat tree of Arthropoda OTUs
+
+## Traits
 ```{r}
-set.seed(1) 
-# Arthropoda
-insectOTU %>%
-filter_taxa(taxon_names == "Arthropoda",subtaxa = TRUE) %>%
-filter_taxa(taxon_ranks %in% c("p","c","o","f")) %>%
-heat_tree(node_label = taxon_names,
-node_color = n_obs,
-node_size = n_obs,
-layout = "da",
-initial_layout = "re")
+Traits = dplyr::inner_join(plantTraits,plantTraitsHierarchy,by=c("TraitName"="TraitName","Trait"="Trait"))
+Traits %<>% select (plant_id,hierarchy)
+veg_data = neophytes
+veg_trait_data = dplyr::inner_join(veg_data,Traits,by=c("plant_id"="plant_id"))
 ```
 
+```{r}
+NeophytesTraitsTaxmap =parse_tax_data(veg_trait_data,
+               class_cols = "hierarchy",
+               class_sep=";",
+               class_regex = "^([a-z]{0,1})_{0,2}(.*)$",
+               class_key = c("tax_rank" = "taxon_rank", "name" = "taxon_name"))
+print(NeophytesTraitsTaxmap)
+
+set.seed(2020) 
+NeophytesTraitsTaxmap %>%
+heat_tree(node_label = taxon_names,
+          node_color = n_obs,
+          node_size = n_obs,
+          layout = "da",
+          initial_layout = "re")
+```
 

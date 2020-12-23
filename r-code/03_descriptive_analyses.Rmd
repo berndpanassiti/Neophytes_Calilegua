@@ -13,12 +13,9 @@ knitr::opts_chunk$set(echo = TRUE)
 source("r-code/00_functions.R") # data_summary
 load("data/workingdata.RData")
 source("r-code/00_functions.R")
-library(ggplot2)
-library(ellipse) #library(GGally) problem with NA's
-library(tidyverse)
-library(vegan)
-library(labdsv)
-library(magrittr) # for %<>%
+using("ggplot2","ellipse","magrittr","tidyverse","vegan","labdsv","broom","gridExtra")
+# ellipse: #library(GGally) problem with NA's
+# magrittr: # for %<>%
 
 mytheme <-  theme(axis.title = element_text(size =18),
         axis.text = element_text(size =14),
@@ -97,39 +94,93 @@ ggplot(df,aes(x=nObs,y=N_neophytes,fill=activity)) + geom_bar(stat="identity") +
 # 3 Diversity boxplots per plot depending on site activity
 
 ```{r}
-# tables needed: sites, vegEnv
+# tables needed: vegEnv
+
+## 1. Plot: species richness (= Nneophytes)
 df = vegEnv %>% dplyr::select(-site_id,-plot_id)
-df%<>%filter(Dneophytes!=0) # library(magrittr) for %<>%
+df%<>%filter(!ring =='ref') # library(magrittr) for %<>%
+df$ring=as.factor(df$ring)
+df$activity=as.factor(df$activity)
+df$value=df$Nneophytes
+df%<>% arrange(ring,activity) # sort for ring and activity
+
+
+########### Kruskal-Wallis #############
+kruskal.test(Dneophytes ~ activity, data = df)
+df %>% group_by(ring) %>%  do(broom::tidy(kruskal.test(x = .$Nneophytes, g = .$activity))) 
+# # A tibble: 4 x 5
+# # Groups:   ring [4]
+#   ring  statistic p.value parameter method                      
+#   <fct>     <dbl>   <dbl>     <int> <chr>                       
+# 1 1         4.49   0.0342         1 Kruskal-Wallis rank sum test
+# 2 2         2.15   0.143          1 Kruskal-Wallis rank sum test
+# 3 3         3.83   0.0503         1 Kruskal-Wallis rank sum test
+# 4 4         0.224  0.636          1 Kruskal-Wallis rank sum test
+
+
+## Posthoc - dunn-Test
+df %>%
+  group_by(ring) %>%
+  dunn_test(Nneophytes~ activity,p.adjust.method="bonferroni")
+
+
+df %>% group_by(ring,activity) %>% get_summary_stats(Nneophytes, type = "mean_sd")
+####################################################
+
+
+
+dfPlot <- data_summary(df, varname=c("value"),
+                    groupnames=c("ring","activity"))
+dfPlot$yminSD<-dfPlot$value-dfPlot$sd
+dfPlot$ymaxSD<-dfPlot$value+dfPlot$sd
+dfPlot[which(dfPlot$yminSD<0),"yminSD"]<-0
+
+dfPlot$nObs =  paste(levels(df$activity),"\n(N=",as.vector(table(df$activity,df$ring)),")",sep="")
+
+
+#dfPlot$sig<-  rep("a",nrow(dfPlot))
+dfPlot$sig<-c("a","b","a","a","a","a","a","a")
+
+g1 =  ggplot(dfPlot,aes(x=nObs,y=value,fill=activity)) + geom_bar(stat="identity")+
+  geom_errorbar(aes(ymin=yminSD, ymax=ymaxSD), width=.2) +
+  #scale_x_discrete(labels=nObs) +
+  labs(y = "Species richness", x = "") + # rename y-axis
+    scale_fill_manual(values=rep(c("grey41", "grey79"),5))+
+    facet_grid(~ring, scales="free_x")+
+  scale_y_continuous(breaks=c(0,1,2,3,4,5)) +
+  theme_bw() + mytheme +
+  geom_text(mapping = aes( y =6, label = sig),size = 6,  fontface=1)
+
+
+
+
+## 2. Plot: inverse Simpson
+df = vegEnv %>% dplyr::select(-site_id,-plot_id)
+df%<>%filter(Dneophytes!=0 & !ring =='ref') # library(magrittr) for %<>%
 df$ring=as.factor(df$ring)
 df$activity=as.factor(df$activity)
 df$value=df$Dneophytes
 df%<>% arrange(ring,activity) # sort for ring and activity
 
 
-
-
-
-
 ########### Kruskal-Wallis #############
-df %>% group_by(ring) %>% do(tidy(kruskal.test(x = .$Dneophytes, g = .$activity)))
+kruskal.test(Dneophytes ~ activity, data = df)
+df %>% group_by(ring) %>%  do(broom::tidy(kruskal.test(x = .$Dneophytes, g = .$activity))) 
+# # A tibble: 4 x 5
+# # Groups:   ring [4]
+#   ring  statistic  p.value parameter method                      
+#   <fct>     <dbl>    <dbl>     <int> <chr>                       
+# 1 1        4.49     0.0342         1 Kruskal-Wallis rank sum test
+# 2 2        2.67     0.103          1 Kruskal-Wallis rank sum test
+# 3 3        0.0359   0.850          1 Kruskal-Wallis rank sum test
+# 4 4      NaN      NaN              1 Kruskal-Wallis rank sum test
 
-%>% get_summary_stats(Dneophytes, type = "mean_sd")
-kruskal.test(Dneophytes ~ activity, data = dat)
-df %>% group_by(ring) %>% do(tidy(kruskal.test(x = .$Dneophytes, g = .$activity)))
+df %>%
+  group_by(ring) %>%
+  dunn_test(Nneophytes~ activity,p.adjust.method="bonferroni")
 
-# #	Kruskal-Wallis rank sum test
-#   ring  statistic p.value parameter method                      
-#   <fct>     <dbl>   <dbl>     <int> <chr>                       
-# 1 1        0       1              1 Kruskal-Wallis rank sum test
-# 2 2        0.0767  0.782          1 Kruskal-Wallis rank sum test
-# 3 3        3.30    0.0694         1 Kruskal-Wallis rank sum test
-# 4 4        0.666   0.415          1 Kruskal-Wallis rank sum test
-# 5 ref      2.68    0.101          1 Kruskal-Wallis rank sum test
-# -> no significance
-
+df %>% group_by(ring,activity) %>% get_summary_stats(Dneophytes, type = "mean_sd")
 ####################################################
-
-
 
 
 # function to let barplot start a 1, since invSimpson starts from 1 (= lowest diversity)
@@ -142,9 +193,6 @@ my_trans <- function(from=0)
             domain = c(from, Inf))
 }
 
-
-
-
 dfPlot <- data_summary(df, varname=c("value"),
                     groupnames=c("ring","activity"))
 dfPlot$yminSD<-dfPlot$value-dfPlot$sd
@@ -155,17 +203,23 @@ dfPlot$nObs =  paste(levels(df$activity),"\n(N=",as.vector(table(df$activity,df$
 
 
 #dfPlot$sig<-  rep("a",nrow(dfPlot))
-dfPlot$sig<-c("","","a","a","a","a","a","a","","")
+dfPlot$sig<-c("a","b","a","a","a","a","","")
 
-  ggplot(dfPlot,aes(x=nObs,y=value,fill=activity)) + geom_bar(stat="identity")+
+g2 =  ggplot(dfPlot,aes(x=nObs,y=value,fill=activity)) + geom_bar(stat="identity")+
   geom_errorbar(aes(ymin=yminSD, ymax=ymaxSD), width=.2) +
   #scale_x_discrete(labels=nObs) +
   labs(y = "inverse Simpson index", x = "") + # rename y-axis
     scale_fill_manual(values=rep(c("grey41", "grey79"),5))+
     facet_grid(~ring, scales="free_x")+
-    scale_y_continuous(trans = my_trans( from=1),breaks=c(1,1.5,2)) +
+    scale_y_continuous(trans = my_trans( from=1),breaks=c(1,2,3,4,5)) +
   theme_bw() + mytheme +
-  geom_text(mapping = aes( y =2.1, label = sig),size = 6,  fontface=1)
+  geom_text(mapping = aes( y =6, label = sig),size = 6,  fontface=1)
+
+
+grid.arrange(g1, g2, nrow = 2)
+
+
+
 ```
 
 
@@ -244,7 +298,7 @@ kruskal.test(Dneophytes ~ df$ring, data = df)
 df = neophytesPlotPercent
 dfGather = df %>% gather(key = "species", value = "cover", 4:17)
 
-dfPlot<- dfGather %>% filter(cover!=0) %>% count(ring,species)
+dfPlot<- dfGather %>% dplyr::filter(cover!=0) %>% dplyr::count(ring,species)
 
 ggplot(dfPlot,aes(x=species,y=n))+ geom_bar(stat="identity")+
     facet_wrap(~ring, ncol=5)+

@@ -1,0 +1,21 @@
+---
+title: "4th corner analyses for neophytes from the Calilegua National Park, Argentina"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+source("r-code/00_functions.R")
+load("data/workingdata.RData")
+using("ggplot2","tidyverse","knitr","mvabund")
+```
+
+
+
+https://rpubs.com/dwarton/68823
+https://heather-grab.github.io/Entom-4940/rql.html

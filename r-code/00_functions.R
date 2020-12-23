@@ -164,3 +164,13 @@ do_auc <- function(model, the_data){
   auc <- auc@y.values[[1]]
   return (auc)
 }
+
+transpose_df <- function(df) {
+  t_df <- data.table::transpose(df)
+  colnames(t_df) <- rownames(df)
+  rownames(t_df) <- colnames(df)
+  t_df <- t_df %>%
+    tibble::rownames_to_column(.data = .) %>%
+    tibble::as_tibble(.)
+  return(t_df)
+}
