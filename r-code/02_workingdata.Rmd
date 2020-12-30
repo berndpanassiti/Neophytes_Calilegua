@@ -151,9 +151,23 @@ NfreqNeophytes=apply(s,1,sum) # total number of selected neophytes
 plants = as_tibble(cbind(s,NfreqNeophytes,NtotalNeophytes))
 ```
 
+# Traits - wrong import of values!
+> plantTraits[which(plantTraits$Trait == '43832.0' | plantTraits$Trait == '43835.0'),]
+# A tibble: 7 x 3
+  plant_id TraitName    Trait  
+  <chr>    <chr>        <chr>  
+1 Mel.alb  height_m_max 43832.0
+2 Pan.max  height_m_max 43832.0
+3 Son.asp  height_m_max 43832.0
+4 Sor.hal  height_m_max 43832.0
+5 Leo.jap  seed_mg      43835.0
+6 Mel.alb  seed_mg      43835.0
+7 Sor.hal  seed_mg      43835.0
 
 
 
+
+# save
 ```{r}
 save(
   neophytes,neophytesPlotPercent,
