@@ -86,28 +86,35 @@ heat_tree(node_label = taxon_names,
 
 
 
-## active vs. inactive
+## traffic disturbance
+Traffic disturbance indicates how many times the sites (+plots) are visited
 ```{r}
+# which plots?
+sites$plot = paste("plot_",sites$plot_id,sep="")
+# which plots have neophyte data?
+NeophyteSites = sites[-which(!sites$plot_id %in% neophytesPlotPercent$plot_id),] 
+NeophyteSites=NeophyteSites[-which(NeophyteSites$traffic==0),] # ignoring reference sites, only 2 records
+
+# compile trait data
 Traits = dplyr::inner_join(plantTraits,plantTraitsHierarchy,by=c("TraitName"="TraitName","Trait"="Trait","Trait_id"="Trait_id"))
 Traits %<>% select (plant_id,Trait_id,hierarchy)
 
-
-# reshape dataset
-## trait_id/sites 1 2
-## trait1
-## trait2
-
+# reshape dataset: rows = trait, cols = plots
 veg_data = data.frame(neophytesPlotPercent)
 rownames(veg_data) = paste("plot_",veg_data$plot_id,sep="")
+
+# remove plots that are not in NeophyteSites
+veg_data=veg_data[-which(!rownames(veg_data) %in% NeophyteSites$plot),]
+
 veg_data = veg_data %>% dplyr::select(-site_id,-ring,-plot_id)
 veg_dataT = transpose_df(veg_data)
 colnames(veg_dataT)[1] = "plant_id"
 
 # combine veg and trait datasets
 veg_trait_data = dplyr::inner_join(Traits,veg_dataT,by=c("plant_id"="plant_id"))
-```
 
-```{r}
+
+# create taxmap object
 NeophytesTraitsTaxmap = NULL
 NeophytesTraitsTaxmap = parse_tax_data(veg_trait_data,
                class_cols = "hierarchy",
@@ -116,50 +123,208 @@ NeophytesTraitsTaxmap = parse_tax_data(veg_trait_data,
                class_key = c("tax_rank" = "taxon_rank", "name" = "taxon_name"))
 print(NeophytesTraitsTaxmap)
 
-set.seed(2020) 
-NeophytesTraitsTaxmap %>%
-heat_tree(node_label = taxon_names,
-          node_color = n_obs,
-          node_size = n_obs,
-          layout = "da",
-          initial_layout = "re")
-```
+# set.seed(2020) 
+# NeophytesTraitsTaxmap %>%
+# heat_tree(node_label = taxon_names,
+#           node_color = n_obs,
+#           node_size = n_obs,
+#           layout = "da",
+#           initial_layout = "re")
 
-# inactive vs active
-```{r}
-sites$plot = paste("plot_",sites$plot_id,sep="")
-NeophyteSites = sites[-which(!sites$plot_id %in% neophytesPlotPercent$plot_id),]
-
-
-# dat = NeophytesTraitsTaxmap$data$tax_data[,-c(1:4)]
-# dat[dat>0]=1
-# NeophytesTraitsTaxmap$data$tax_data[,-c(1:4)] = dat
-# NeophytesTraitsTaxmap$data$tax_abd=calc_taxon_abund(NeophytesTraitsTaxmap,"tax_data")
-# NeophytesTraitsTaxmap$data$diff_table <- compare_groups(NeophytesTraitsTaxmap,data="tax_abd", cols=NeophyteSites$plot,groups=NeophyteSites$activity)
-
-
+# calculate trait abundance per plot
 NeophytesTraitsTaxmap$data$rel_abd=calc_obs_props(NeophytesTraitsTaxmap,"tax_data")
 NeophytesTraitsTaxmap$data$tax_rel_abd=calc_taxon_abund(NeophytesTraitsTaxmap,"rel_abd")
 
-
-
-NeophytesTraitsTaxmap$data$diff_table <- compare_groups(NeophytesTraitsTaxmap,data="tax_rel_abd", cols=NeophyteSites$plot,groups=NeophyteSites$ring)
+# compare groups: rings
+NeophytesTraitsTaxmap$data$diff_table <- compare_groups(NeophytesTraitsTaxmap,data="tax_rel_abd", cols=NeophyteSites$plot,groups=NeophyteSites$traffic,
+ fun=function(abund_1, abund_2) {
+  list(abund1 = median(abund_1),
+       abund2 = median(abund_2),
+       median_diff = median(abund_1) - median(abund_2),
+       mean_diff = mean(abund_1) - mean(abund_2),
+       wilcox_p_value = wilcox.test(abund_1, abund_2)$p.value)
+}                                                       
+)
 #View(NeophytesTraitsTaxmap$data$diff_table)
 
+NeophytesTraitsTaxmap$data$diff_table$median_diff_s = scale01(NeophytesTraitsTaxmap$data$diff_table$median_diff)
+NeophytesTraitsTaxmap$data$diff_table$mean_diff_s = scale01(NeophytesTraitsTaxmap$data$diff_table$mean_diff)
 
-dat=NeophytesTraitsTaxmap$data$diff_table
-NeophytesTraitsTaxmap$data$diff_table=dat[which(dat$treatment_2!="ref"),]
-
-set.seed(1)
+set.seed(2020)
 NeophytesTraitsTaxmap %>%
   heat_tree_matrix(data = "diff_table",
                    node_size=n_obs,
                    node_label = taxon_names,
-                   node_color = log2_median_ratio,
-                   #node_color = log2_median_ratio,
+                   node_color = mean_diff_s,
                    node_color_range = diverging_palette(),
-                   node_color_axis_label="Mean difference",
-                   node_color_interval = c(-1,6),
+                   node_color_trans = "linear",
+                   node_color_axis_label="Median difference",
+                   node_color_interval = c(0,1),
                    layout="davidson-harel", initial_layout="reingold-tilford")
+```
+
+
+
+## traffic disturbance
+Traffic disturbance indicates how many times the sites (+plots) are visited
+```{r}
+# which plots?
+sites$plot = paste("plot_",sites$plot_id,sep="")
+# which plots have neophyte data?
+NeophyteSites = sites[-which(!sites$plot_id %in% neophytesPlotPercent$plot_id),] 
+NeophyteSites=NeophyteSites[-which(NeophyteSites$traffic==0),] # ignoring reference sites, only 2 records
+
+# compile trait data
+Traits = dplyr::inner_join(plantTraits,plantTraitsHierarchy,by=c("TraitName"="TraitName","Trait"="Trait","Trait_id"="Trait_id"))
+Traits %<>% select (plant_id,Trait_id,hierarchy)
+
+# reshape dataset: rows = trait, cols = plots
+veg_data = data.frame(neophytesPlotPercent)
+rownames(veg_data) = paste("plot_",veg_data$plot_id,sep="")
+
+# remove plots that are not in NeophyteSites
+veg_data=veg_data[-which(!rownames(veg_data) %in% NeophyteSites$plot),]
+
+veg_data = veg_data %>% dplyr::select(-site_id,-ring,-plot_id)
+veg_dataT = transpose_df(veg_data)
+colnames(veg_dataT)[1] = "plant_id"
+
+# combine veg and trait datasets
+veg_trait_data = dplyr::inner_join(Traits,veg_dataT,by=c("plant_id"="plant_id"))
+
+
+# create taxmap object
+NeophytesTraitsTaxmap = NULL
+NeophytesTraitsTaxmap = parse_tax_data(veg_trait_data,
+               class_cols = "hierarchy",
+               class_sep=";",
+               class_regex = "^([a-z]{0,1})_{0,2}(.*)$",
+               class_key = c("tax_rank" = "taxon_rank", "name" = "taxon_name"))
+print(NeophytesTraitsTaxmap)
+
+# set.seed(2020) 
+# NeophytesTraitsTaxmap %>%
+# heat_tree(node_label = taxon_names,
+#           node_color = n_obs,
+#           node_size = n_obs,
+#           layout = "da",
+#           initial_layout = "re")
+
+# calculate trait abundance per plot
+NeophytesTraitsTaxmap$data$rel_abd=calc_obs_props(NeophytesTraitsTaxmap,"tax_data")
+NeophytesTraitsTaxmap$data$tax_rel_abd=calc_taxon_abund(NeophytesTraitsTaxmap,"rel_abd")
+
+# compare groups: rings
+NeophytesTraitsTaxmap$data$diff_table <- compare_groups(NeophytesTraitsTaxmap,data="tax_rel_abd", cols=NeophyteSites$plot,groups=NeophyteSites$traffic,
+ fun=function(abund_1, abund_2) {
+  list(abund1 = vegan::specnumber(abund_1),
+       abund2 = vegan::specnumber(abund_2),
+       median_diff = median(abund_1) - median(abund_2),
+       mean_diff = mean(abund_1) - mean(abund_2),
+       wilcox_p_value = wilcox.test(abund_1, abund_2)$p.value)
+}                                                       
+)
+#View(NeophytesTraitsTaxmap$data$diff_table)
+
+NeophytesTraitsTaxmap$data$diff_table$median_diff_s = scale01(NeophytesTraitsTaxmap$data$diff_table$median_diff)
+NeophytesTraitsTaxmap$data$diff_table$mean_diff_s = scale01(NeophytesTraitsTaxmap$data$diff_table$mean_diff)
+
+set.seed(2020)
+NeophytesTraitsTaxmap %>%
+  heat_tree_matrix(data = "diff_table",
+                   node_size=n_obs,
+                   node_label = taxon_names,
+                   node_color = mean_diff_s,
+                   node_color_range = diverging_palette(),
+                   node_color_trans = "linear",
+                   node_color_axis_label="Median difference",
+                   node_color_interval = c(0,1),
+                   layout="davidson-harel", initial_layout="reingold-tilford")
+```
+
+
+## active vs. inactive
+Traffic disturbance indicates how many times the sites (+plots) are visited
+```{r}
+# which plots?
+sites$plot = paste("plot_",sites$plot_id,sep="")
+# which plots have neophyte data?
+NeophyteSites = sites[-which(!sites$plot_id %in% neophytesPlotPercent$plot_id),] 
+
+
+# compile trait data
+Traits = dplyr::inner_join(plantTraits,plantTraitsHierarchy,by=c("TraitName"="TraitName","Trait"="Trait","Trait_id"="Trait_id"))
+Traits %<>% select (plant_id,Trait_id,hierarchy)
+
+# reshape dataset: rows = trait, cols = plots
+veg_data = data.frame(neophytesPlotPercent)
+rownames(veg_data) = paste("plot_",veg_data$plot_id,sep="")
+
+veg_data = veg_data %>% dplyr::select(-site_id,-ring,-plot_id)
+veg_dataT = transpose_df(veg_data)
+colnames(veg_dataT)[1] = "plant_id"
+
+# combine veg and trait datasets
+veg_trait_data = dplyr::inner_join(Traits,veg_dataT,by=c("plant_id"="plant_id"))
+
+veg_trait_data_Mean = veg_trait_data %>% dplyr::select(-plant_id) %>%
+dplyr::group_by(Trait_id,hierarchy) %>% dplyr::summarise_at(vars(-group_cols()), mean)
+
+
+# create taxmap object
+NeophytesTraitsTaxmap = NULL
+NeophytesTraitsTaxmap = parse_tax_data(veg_trait_data_Mean,
+               class_cols = "hierarchy",
+               class_sep=";",
+               class_regex = "^([a-z]{0,1})_{0,2}(.*)$",
+               class_key = c("tax_rank" = "taxon_rank", "name" = "taxon_name"))
+print(NeophytesTraitsTaxmap)
+
+# set.seed(2020) 
+# NeophytesTraitsTaxmap %>%
+# heat_tree(node_label = taxon_names,
+#           node_color = n_obs,
+#           node_size = n_obs,
+#           layout = "da",
+#           initial_layout = "re")
+
+# calculate trait abundance per plot
+NeophytesTraitsTaxmap$data$rel_abd=calc_obs_props(NeophytesTraitsTaxmap,"tax_data")
+NeophytesTraitsTaxmap$data$tax_rel_abd=calc_taxon_abund(NeophytesTraitsTaxmap,"rel_abd")
+
+# compare groups: rings
+NeophytesTraitsTaxmap$data$diff_table <- compare_groups(NeophytesTraitsTaxmap,data="tax_rel_abd", cols=NeophyteSites$plot,groups=NeophyteSites$activity,
+ fun=function(abund_1, abund_2) {
+  list(Nabund1 = vegan::specnumber(abund_1),
+       Nabund2 = vegan::specnumber(abund_2),
+       Nmean_diff = vegan::specnumber(abund_1) - vegan::specnumber(abund_2),
+       Meanabund1 = mean(abund_1),
+       Meanabund2 = mean(abund_2),
+       #median_diff = median(abund_1) - median(abund_2),
+       mean_diff = mean(abund_1) - mean(abund_2),
+       wilcox_p_value = wilcox.test(abund_1, abund_2)$p.value)
+}                                                       
+)
+#NeophytesTraitsTaxmap$data$diff_table$median_diff_s = scale01(NeophytesTraitsTaxmap$data$diff_table$median_diff)
+NeophytesTraitsTaxmap$data$diff_table$Nmean_diff_s = as.numeric(scale(NeophytesTraitsTaxmap$data$diff_table$Nmean_diff))
+NeophytesTraitsTaxmap$data$diff_table$mean_diff_s = as.numeric(scale(NeophytesTraitsTaxmap$data$diff_table$mean_diff))
+
+#View(NeophytesTraitsTaxmap$data$diff_table)
+
+NeophytesTraitsTaxmap$data$tax_occ <- calc_n_samples(NeophytesTraitsTaxmap, "tax_rel_abd", cols=NeophyteSites$plot,groups=NeophyteSites$activity)
+
+set.seed(2020) # This makes the plot appear the same each time it is run 
+NeophytesTraitsTaxmap %>%
+  heat_tree(
+          node_label = taxon_names,
+          node_size = n_obs,
+          node_color = NeophytesTraitsTaxmap$data$diff_table$Nmean_diff_s, 
+          node_color_range = c("#e5e5e5","#999999"),
+                   node_color_trans = "linear",
+                   node_color_interval = c(-1,1),
+          node_size_axis_label = "Number of trait observations",
+          node_color_axis_label = "Differences in trait presences",
+          layout = "davidson-harel", # The primary layout algorithm
+          initial_layout = "reingold-tilford") # The layout algorithm that initializes node locations
 ```
 

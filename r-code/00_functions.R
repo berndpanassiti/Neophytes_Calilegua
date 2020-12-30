@@ -174,3 +174,6 @@ transpose_df <- function(df) {
     tibble::as_tibble(.)
   return(t_df)
 }
+
+
+scale01 <- function(x){(x-min(x))/(max(x)-min(x))}
