@@ -313,18 +313,49 @@ NeophytesTraitsTaxmap$data$diff_table$mean_diff_s = as.numeric(scale(NeophytesTr
 
 NeophytesTraitsTaxmap$data$tax_occ <- calc_n_samples(NeophytesTraitsTaxmap, "tax_rel_abd", cols=NeophyteSites$plot,groups=NeophyteSites$activity)
 
-set.seed(2020) # This makes the plot appear the same each time it is run 
+
+set.seed(3) # This makes the plot appear the same each time it is run 
 NeophytesTraitsTaxmap %>%
   heat_tree(
-          node_label = taxon_names,
+          node_label = ifelse(NeophytesTraitsTaxmap$data$diff_table$wilcox_p_value < 0.05, paste("[",taxon_names,"]",sep=""), taxon_names),
           node_size = n_obs,
-          node_color = NeophytesTraitsTaxmap$data$diff_table$Nmean_diff_s, 
-          node_color_range = c("#e5e5e5","#999999"),
-                   node_color_trans = "linear",
-                   node_color_interval = c(-1,1),
+          
+          node_color = NeophytesTraitsTaxmap$data$diff_table$Nmean_diff, 
+          node_color_range = diverging_palette(),
+          #node_color_range = c("#999999","#e5e5e5","#999999"),
+          node_color_trans = "area",
+          node_color_interval = c(-1,16),
+          edge_color = ifelse(wilcox_p_value < 0.05, 0, 1),
+          edge_color_range = c("honeydew2", "grey50"),
+          edge_color_trans = "linear",
+          edge_color_interval = c(0, 1),
           node_size_axis_label = "Number of trait observations",
           node_color_axis_label = "Differences in trait presences",
+          edge_color_axis_label = "p-value",
           layout = "davidson-harel", # The primary layout algorithm
-          initial_layout = "reingold-tilford") # The layout algorithm that initializes node locations
+          initial_layout = "reingold-tilford",
+          repel_labels = TRUE, 
+            repel_force = 3,
+            overlap_avoidance = 3) # The layout algorithm that initializes node locations
+
+
+
+
+set.seed(3) # This makes the plot appear the same each time it is run 
+NeophytesTraitsTaxmap %>%
+  heat_tree(
+          node_label = ifelse(NeophytesTraitsTaxmap$data$diff_table$wilcox_p_value < 0.05, paste("[",taxon_names,"]",sep=""), taxon_names),
+          node_size =  NeophytesTraitsTaxmap$data$diff_table$Nmean_diff_s,
+          node_color = ifelse(wilcox_p_value < 0.05, 0, 1),
+          node_color_range = c("honeydew2", "grey50"),
+          node_color_trans = "linear",
+          node_color_interval = c(0, 1),
+          node_size_axis_label = "Differences in trait presences",
+          node_color_axis_label = "p-value",
+          layout = "davidson-harel", # The primary layout algorithm
+          initial_layout = "reingold-tilford",
+          repel_labels = TRUE, 
+            repel_force = 3,
+            overlap_avoidance = 3) # The layout algorithm that initializes node locations
 ```
 

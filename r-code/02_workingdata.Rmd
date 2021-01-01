@@ -66,7 +66,7 @@ veg=rbind(neophytesPlotPercent,df)
 # scale continous environmental variables
 env=sites %>% dplyr::select(-exposure)
 env %<>% hablar::retype() 
-cols=c("ring","zone","activity","plant_comunity","soil_coverage","soil_type","foliage","humus","cement","leak","waste","treeAbund","shrubAbund","herbAbund")
+cols=c("ring","traffic","activity","plant_comunity","soil_coverage","soil_type","foliage","humus","cement","leak","waste","treeAbund","shrubAbund","herbAbund")
 env %<>% dplyr::mutate_each_(funs(factor(.)),cols)
 
 
@@ -139,7 +139,7 @@ df
 # Cyn.dac Eup.hir Meg.max Ric.com 
 #   12.59    9.79   54.55   12.59
 
-selectedNeophytes =veg %>% dplyr::select(site_id,ring,plot_id,names(df[df>9]))
+selectedNeophytes =veg %>% dplyr::select(site_id,ring,plot_id,names(df[df>10]))
 
 
 # presences and total richness for selected neophytes

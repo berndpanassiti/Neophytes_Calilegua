@@ -16,6 +16,7 @@ using("plyr","ggplot2","tidyverse","purrr","dplyr","broom","knitr","skimr","MuMI
 
 rm(.Random.seed, envir=globalenv())
 set.seed(2020)
+Nplants=3
 ```
 
 
@@ -27,17 +28,17 @@ environment = env %>% dplyr::select(-plot_id,-date,-foliage)
 
 # create separate datasets for each plant
 plantsEnv = list()
-for (i in 1:6){
+for (i in 1:Nplants){
   plantsEnv[[i]] = as_tibble(cbind(plants[,i],environment))
   colnames(plantsEnv[[i]])[1] ="y"}
 
 
 allfits=list()
-for (i in 1:6){
+for (i in 1:Nplants){
 df =as.data.frame(plantsEnv[[i]])
 #full <- glm(y~.+(1|site_id),data=df,family="binomial",na.action=na.fail)
 set.seed(2020)
-full <- glm(y~ring+zone+activity+elevation+slope+plant_comunity+soil_coverage+soil_type+humus+cement+leak+waste+treeAbund+shrubAbund+herbAbund +aspect+(1|site_id),data=df,family="binomial",na.action=na.fail)
+full <- glm(y~ring+traffic+activity+elevation+slope+plant_comunity+soil_coverage+soil_type+humus+cement+leak+waste+treeAbund+shrubAbund+herbAbund +aspect,data=df,family="binomial",na.action=na.fail)
 allfits[[i]] <- MuMIn::dredge(full,m.lim=c(4,4))
 #allfits[[i]] <- MuMIn::dredge(full,m.lim=c(3,3),trace = TRUE)
 } # N parameter for each model
@@ -53,11 +54,11 @@ Get only models for selected neophytes above AUC threshold
 bestAUCmodels = list()
 AUCthreshold = 0.80
 
-for (i in 1:6){
+for (i in 1:Nplants){
 set.seed(2020)
 df =as.data.frame(plantsEnv[[i]])
 modelFits = allfits[[i]]
-dredge.mdl <- get.models(modelFits, evaluate=TRUE,warnings=TRUE) # fct from MuMIn
+dredge.mdl <- get.models(modelFits,subset=T) # fct from MuMIn
 
 aucsList=lapply(dredge.mdl,function(x)(do_auc(x, df))) # do_auc defined in 00_functions.R
 aucs=unlist(aucsList)
@@ -79,52 +80,55 @@ bestAUCmodels[[i]]= data.frame(matrix(unlist(l), nrow=length(l), byrow=T),as.vec
 result= plyr::ldply(bestAUCmodels, data.frame)
 colnames(result)[ncol(result)]="AUC"
 
-# combinations of 4 parameter for each model
-# resultFreq = result %>% dplyr::group_by(X1,X2,X3,X4) %>% dplyr::summarise(n = n(),minAUC = min(AUC),maxAUC = max(AUC))
-# print(as_tibble(resultFreq %>% arrange(desc(n),desc(minAUC))),n=10)
-# resultFreq4 = resultFreq; result4 = result
-
 # combinations of 3 parameter for each model
 resultFreq = result %>% dplyr::group_by(X1,X2,X3) %>% dplyr::summarise(n = n(),minAUC = min(AUC),maxAUC = max(AUC))
 print(as_tibble(resultFreq %>% arrange(desc(n),desc(minAUC))),n=10)
 resultFreq3 = resultFreq; result3 = result
+
+# combinations of 4 parameter for each model
+resultFreq = result %>% dplyr::group_by(X1,X2,X3,X4) %>% dplyr::summarise(n = n(),minAUC = min(AUC),maxAUC = max(AUC))
+print(as_tibble(resultFreq %>% arrange(desc(n),desc(minAUC))),n=10)
+resultFreq4 = resultFreq; result4 = result
 ```
 
-> print(as_tibble(resultFreq3 %>% arrange(desc(n),desc(minAUC))),n=10)
-# A tibble: 169 x 6
-   X1             X2             X3                 n minAUC maxAUC
-   <chr>          <chr>          <chr>          <int>  <dbl>  <dbl>
- 1 herbAbund      ring           treeAbund          4  0.907  0.929
- 2 ring           shrubAbund     treeAbund          4  0.900  0.926
- 3 plant_comunity ring           zone               3  0.917  0.947
- 4 plant_comunity ring           shrubAbund         3  0.917  0.935
- 5 herbAbund      plant_comunity ring               3  0.916  0.947
- 6 ring           treeAbund      zone               3  0.912  0.937
- 7 herbAbund      plant_comunity shrubAbund         3  0.909  0.947
- 8 herbAbund      humus          plant_comunity     3  0.909  0.938
- 9 humus          plant_comunity ring               3  0.908  0.943
-10 humus          ring           treeAbund          3  0.903  0.937
-# … with 159 more rows
-> print(as_tibble(resultFreq4 %>% arrange(desc(n),desc(minAUC))),n=10)
-# A tibble: 907 x 7
-   X1             X2             X3         X4            n minAUC maxAUC
-   <chr>          <chr>          <chr>      <chr>     <int>  <dbl>  <dbl>
- 1 herbAbund      ring           slope      treeAbund     5  0.916  0.935
- 2 ring           shrubAbund     slope      treeAbund     5  0.912  0.935
- 3 herbAbund      ring           shrubAbund treeAbund     5  0.912  0.963
- 4 plant_comunity ring           slope      treeAbund     5  0.908  0.945
- 5 humus          plant_comunity ring       treeAbund     5  0.907  0.963
- 6 herbAbund      humus          ring       treeAbund     5  0.907  0.960
- 7 herbAbund      plant_comunity slope      treeAbund     5  0.905  0.951
- 8 humus          ring           shrubAbund treeAbund     5  0.904  0.981
- 9 plant_comunity ring           shrubAbund treeAbund     5  0.903  0.952
-10 ring           slope          treeAbund  zone          5  0.902  0.934
+> print(as_tibble(resultFreq %>% arrange(desc(n),desc(minAUC))),n=10)
+# A tibble: 415 x 6
+   X1       X2        X3            n minAUC maxAUC
+   <chr>    <chr>     <chr>     <int>  <dbl>  <dbl>
+ 1 activity aspect    herbAbund    44  0.813  0.938
+ 2 activity cement    herbAbund    44  0.810  0.930
+ 3 activity elevation herbAbund    44  0.810  0.929
+ 4 activity aspect    cement       44  0.804  0.913
+ 5 activity herbAbund humus        40  0.838  0.941
+ 6 activity aspect    elevation    39  0.805  0.906
+ 7 activity cement    elevation    39  0.801  0.911
+ 8 activity cement    humus        39  0.801  0.932
+ 9 activity herbAbund leak         36  0.810  0.934
+10 activity elevation humus        35  0.808  0.923
+# … with 405 more rows
+
+
+> print(as_tibble(resultFreq %>% arrange(desc(n),desc(minAUC))),n=10)
+# A tibble: 1,333 x 7
+   X1        X2             X3         X4            n minAUC maxAUC
+   <chr>     <chr>          <chr>      <chr>     <int>  <dbl>  <dbl>
+ 1 herbAbund ring           slope      traffic       4  0.881  0.938
+ 2 activity  herbAbund      ring       slope         4  0.875  0.926
+ 3 herbAbund humus          slope      traffic       4  0.873  0.943
+ 4 herbAbund ring           traffic    treeAbund     4  0.872  0.941
+ 5 activity  herbAbund      shrubAbund treeAbund     4  0.869  0.928
+ 6 herbAbund shrubAbund     traffic    treeAbund     4  0.869  0.943
+ 7 cement    herbAbund      traffic    treeAbund     4  0.867  0.942
+ 8 activity  herbAbund      shrubAbund soil_type     4  0.866  0.911
+ 9 activity  herbAbund      shrubAbund traffic       4  0.865  0.927
+10 activity  plant_comunity shrubAbund soil_type     4  0.865  0.923
+
 
 
 ```{r}
 save(
   resultFreq3,result3,
-  resultFreq4,result3,
+  resultFreq4,result4,
     file="data/preselectionVariables.RData"
 )
 ```
@@ -135,7 +139,7 @@ save(
 
 ###### Binary environment
 ```{r}
-dat = env %>% dplyr::select(zone,plant_comunity,soil_type,humus,treeAbund,herbAbund,shrubAbund) # colSums(is.na(df))
+dat = env %>% dplyr::select(traffic,plant_comunity,soil_type,humus,treeAbund,herbAbund,shrubAbund) # colSums(is.na(df))
 datBinNum = env %>% dplyr::select(site_id,ring,activity,elevation,slope,cement,leak,waste,aspect)
 # One-Hot Encoding
 # Creating dummy variables is converting a categorical variable to as many binary variables as here are categories.
@@ -150,28 +154,28 @@ environment <- data.frame(predict(dummies_model, newdata = dat),datBinNum)
 # PreSelection of environmental variables
 ## Run all combinations of variables for all selected neophytes
 ```{r}
-preds = environment %>% dplyr::select(-zone.high,-zone.low,-zone.middle,-treeAbund.0,-treeAbund.1,-treeAbund.2,-treeAbund.3,-herbAbund.0,-herbAbund.1,-herbAbund.2,-herbAbund.3,-shrubAbund.0,-shrubAbund.1,-shrubAbund.2,-shrubAbund.3)
+preds = environment %>% dplyr::select(-treeAbund.0,-treeAbund.1,-treeAbund.2,-treeAbund.3,-herbAbund.0,-herbAbund.1,-herbAbund.2,-herbAbund.3,-shrubAbund.0,-shrubAbund.1,-shrubAbund.2,-shrubAbund.3)
 
 # create separate datasets for each plant
 plantsEnv = list()
-for (i in 1:4){
+for (i in 1:Nplants){
   plantsEnv[[i]] = as_tibble(cbind(plants[,i],preds))
   colnames(plantsEnv[[i]])[1] ="y"}
 
 
 allfits=list()
-for (i in 1:4){
+for (i in 1:Nplants){
 df =as.data.frame(plantsEnv[[i]])
 #full <- glm(y~.+(1|site_id),data=df,family="binomial",na.action=na.fail)
 set.seed(2020)
 full <- glm(y~
 ring+plant_comunity.altered.forest+plant_comunity.forest        
-+plant_comunity.pasture+plant_comunity.shrubs+soil_type.1+soil_type.2+soil_type.3                  
++plant_comunity.pasture+plant_comunity.shrubs+traffic.0+traffic.1+traffic.2+traffic.3+soil_type.1+soil_type.2+soil_type.3                  
 +soil_type.4+humus.absent+humus.abundant+humus.rare+humus.regular                
 +treeAbund.4+herbAbund.4+shrubAbund.4+activity+elevation+slope+cement+leak                         
-+waste +aspect+(1|site_id),data=df,family="binomial",na.action=na.fail)
-#allfits[[i]] <- MuMIn::dredge(full,m.lim=c(4,4),fixed= ~ring+activity,extra=c("R^2", "adjR^2"))
-allfits[[i]] <- MuMIn::dredge(full,m.lim=c(3,3),fixed= ~ring+activity,extra=c("R^2", "adjR^2"))
++waste +aspect,data=df,family="binomial",na.action=na.fail)
+allfits[[i]] <- MuMIn::dredge(full,m.lim=c(4,4),fixed= ~ring+activity,extra=c("R^2", "adjR^2"))
+#allfits[[i]] <- MuMIn::dredge(full,m.lim=c(3,3),fixed= ~ring+activity,extra=c("R^2", "adjR^2"))
 } # N parameter for each model
 ```
 
@@ -180,13 +184,13 @@ allfits[[i]] <- MuMIn::dredge(full,m.lim=c(3,3),fixed= ~ring+activity,extra=c("R
 
 
 
-# Best AUC models - 3 parameters
+# Best AUC models - 4 parameters
 Get only models for selected neophytes above AUC threshold
 
 ```{r}
 modelsAUC = list()
 
-for (i in 1:4){
+for (i in 1:Nplants){
 set.seed(2020)
 df =as.data.frame(plantsEnv[[i]])
 modelFits = allfits[[i]]
@@ -213,176 +217,85 @@ resultFreq = result %>% dplyr::group_by(X1,X2,X3,X4) %>% dplyr::summarise(n = n(
 
 resultFreq = data.frame(resultFreq)
 
-dat=data.frame(apply(resultFreq[,1:2],2,function(x) stringr::str_extract(x, "^.{5}")))
-dat$ident=NULL
-dat[which(dat[,1]==dat[,2]),"ident"]=1
+# dat=data.frame(apply(resultFreq[,1:2],2,function(x) stringr::str_extract(x, "^.{5}")))
+# dat$ident=NULL
+# dat[which(dat[,1]==dat[,2]),"ident"]=1
+# 
+# resultFreq.filtered = resultFreq[-which(dat$ident==1),]
+# 
+# print(as_tibble(resultFreq.filtered) %>% arrange(desc(n), desc(minR.2)),n=10)
+# print(as_tibble(resultFreq.filtered) %>% arrange(desc(n), desc(meanAUC)),n=10)
+# 
+# test = resultFreq.filtered %>% dplyr::filter(X1=="plant_comunity.altered.forest" | X2=="plant_comunity.altered.forest")
 
-resultFreq.filtered = resultFreq[-which(dat$ident==1),]
-
-print(as_tibble(resultFreq.filtered) %>% arrange(desc(n), desc(minR.2)),n=10)
-print(as_tibble(resultFreq.filtered) %>% arrange(desc(n), desc(meanAUC)),n=10)
-
-
-
-
-test = resultFreq.filtered %>% dplyr::filter(X1=="plant_comunity.altered.forest" | X2=="plant_comunity.altered.forest")
-               
 resultFreq4 = resultFreq; result4 = result
-
-
-
 print(as_tibble(resultFreq %>% arrange(desc(n),desc(meanAUC))),n=100)
 ```
 
-
-
-> print(as_tibble(resultFreq %>% arrange(desc(n),desc(meanAUC))),n=100)
-# A tibble: 210 x 10
+print(as_tibble(resultFreq %>% arrange(desc(n),desc(meanAUC))),n=100)
+# A tibble: 300 x 10
     X1                            X2                            X3       X4        n minR.2 maxR.2 meanAUC minAUC maxAUC
     <chr>                         <chr>                         <chr>    <chr> <int>  <dbl>  <dbl>   <dbl>  <dbl>  <dbl>
-  1 plant_comunity.altered.forest plant_comunity.forest         activity ring      4 0.124   0.584   0.865  0.810  0.923
-  2 plant_comunity.pasture        plant_comunity.shrubs         activity ring      4 0.123   0.583   0.863  0.815  0.926
-  3 herbAbund.4                   plant_comunity.shrubs         activity ring      4 0.113   0.507   0.850  0.794  0.911
-  4 plant_comunity.altered.forest soil_type.2                   activity ring      4 0.0878  0.452   0.833  0.757  0.893
-  5 plant_comunity.altered.forest treeAbund.4                   activity ring      4 0.0867  0.448   0.833  0.769  0.887
-  6 herbAbund.4                   plant_comunity.altered.forest activity ring      4 0.0845  0.482   0.829  0.759  0.903
-  7 plant_comunity.altered.forest plant_comunity.shrubs         activity ring      4 0.0795  0.492   0.825  0.754  0.896
-  8 plant_comunity.altered.forest slope                         activity ring      4 0.0595  0.465   0.824  0.742  0.901
-  9 plant_comunity.altered.forest soil_type.3                   activity ring      4 0.0931  0.446   0.822  0.754  0.886
- 10 humus.absent                  plant_comunity.altered.forest activity ring      4 0.0620  0.460   0.820  0.733  0.892
- 11 humus.abundant                plant_comunity.altered.forest activity ring      4 0.0619  0.446   0.819  0.734  0.897
- 12 plant_comunity.altered.forest plant_comunity.pasture        activity ring      4 0.0782  0.484   0.819  0.750  0.897
- 13 aspect                        plant_comunity.altered.forest activity ring      4 0.0695  0.449   0.816  0.739  0.896
- 14 plant_comunity.altered.forest waste                         activity ring      4 0.0804  0.448   0.815  0.750  0.887
- 15 elevation                     plant_comunity.altered.forest activity ring      4 0.0598  0.446   0.815  0.734  0.888
- 16 plant_comunity.altered.forest soil_type.1                   activity ring      4 0.0594  0.451   0.815  0.735  0.891
- 17 humus.regular                 plant_comunity.altered.forest activity ring      4 0.0622  0.451   0.814  0.746  0.888
- 18 plant_comunity.altered.forest shrubAbund.4                  activity ring      4 0.0843  0.451   0.814  0.757  0.886
- 19 plant_comunity.altered.forest soil_type.4                   activity ring      4 0.0591  0.445   0.814  0.735  0.888
- 20 humus.rare                    plant_comunity.altered.forest activity ring      4 0.0608  0.446   0.813  0.733  0.883
+  1 slope                         traffic.3                     activity ring      3  0.177  0.490   0.880  0.829  0.918
+  2 humus.regular                 traffic.3                     activity ring      3  0.171  0.487   0.878  0.831  0.916
+  3 herbAbund.4                   slope                         activity ring      3  0.188  0.420   0.875  0.866  0.883
+  4 herbAbund.4                   traffic.3                     activity ring      3  0.176  0.481   0.875  0.835  0.904
+  5 humus.regular                 slope                         activity ring      3  0.169  0.430   0.874  0.843  0.892
+  6 traffic.3                     waste                         activity ring      3  0.168  0.475   0.874  0.837  0.903
+  7 humus.absent                  traffic.3                     activity ring      3  0.165  0.483   0.874  0.824  0.912
+  8 shrubAbund.4                  traffic.3                     activity ring      3  0.166  0.476   0.874  0.827  0.904
+  9 soil_type.1                   traffic.3                     activity ring      3  0.164  0.507   0.873  0.822  0.925
+ 10 soil_type.3                   traffic.3                     activity ring      3  0.163  0.482   0.873  0.819  0.908
+ 11 soil_type.2                   traffic.3                     activity ring      3  0.173  0.475   0.873  0.830  0.903
+ 12 plant_comunity.pasture        slope                         activity ring      3  0.164  0.434   0.871  0.842  0.891
+ 13 slope                         soil_type.2                   activity ring      3  0.158  0.413   0.870  0.835  0.895
+ 14 plant_comunity.pasture        traffic.3                     activity ring      3  0.166  0.480   0.870  0.819  0.908
+ 15 humus.regular                 soil_type.2                   activity ring      3  0.166  0.414   0.869  0.834  0.891
+ 16 soil_type.4                   traffic.3                     activity ring      3  0.183  0.481   0.869  0.826  0.905
+ 17 slope                         traffic.2                     activity ring      3  0.151  0.448   0.869  0.821  0.906
+ 18 slope                         soil_type.3                   activity ring      3  0.148  0.424   0.868  0.822  0.895
+ 19 plant_comunity.shrubs         traffic.3                     activity ring      3  0.164  0.475   0.868  0.829  0.902
+ 20 leak                          slope                         activity ring      3  0.149  0.437   0.867  0.829  0.893
 
 
-
-
-# Best AUC models - 3 parameters
-Get only models for selected neophytes above AUC threshold
-
-```{r}
-modelsAUC = list()
-
-for (i in 1:4){
-set.seed(2020)
-df =as.data.frame(plantsEnv[[i]])
-modelFits = allfits[[i]]
-dredge.mdl <- get.models(modelFits, TRUE) # fct from MuMIn
-
-aucsList=lapply(dredge.mdl,function(x)(do_auc(x, df))) # do_auc defined in 00_functions.R
-AUC=unlist(aucsList)
-
-l=lapply(1:length(dredge.mdl),function(x) names(dredge.mdl[[x]]$model)[-1])
-
-modelsAUC[[i]]= data.frame(y=rep(i,length(l)),matrix(unlist(l), nrow=length(l), byrow=T),data.frame(modelFits)[,(ncol(modelFits)-6):ncol(modelFits)],AUC)
-}
-
-
-# combinations of 3 parameter for each model
-resultFreq = result %>% dplyr::group_by(X1,X2,X3) %>% dplyr::summarise(n = n(),
-                                                                          minR.2 = min(R.2),maxR.2 = max(R.2),meanAUC = mean(R.2),
-                                                                          minAUC = min(AUC),maxAUC = max(AUC),meanAUC = mean(AUC))
-
-
-
-resultFreq.filtered = data.frame(resultFreq)
-
-print(as_tibble(resultFreq.filtered) %>% arrange(desc(n), desc(minR.2)),n=10)
-print(as_tibble(resultFreq.filtered) %>% arrange(desc(n), desc(meanAUC)),n=10)
-
-
-
-
-test = resultFreq.filtered %>% dplyr::filter(X1=="plant_comunity.altered.forest" | X2=="plant_comunity.altered.forest")
-               
-resultFreq3 = resultFreq; result3 = result
-
-
-
-print(as_tibble(resultFreq %>% arrange(desc(n),desc(meanAUC))),n=100)
-```
-
-
-
-
-
-
-
+# A tibble: 300 x 10
+    X1                            X2                            X3       X4        n minR.2 maxR.2 meanAUC minAUC maxAUC
+    <chr>                         <chr>                         <chr>    <chr> <int>  <dbl>  <dbl>   <dbl>  <dbl>  <dbl>
+  1 herbAbund.4                   slope                         activity ring      3  0.188  0.420   0.875  0.866  0.883
+  2 humus.regular                 slope                         activity ring      3  0.169  0.430   0.874  0.843  0.892
+  3 plant_comunity.pasture        slope                         activity ring      3  0.164  0.434   0.871  0.842  0.891
+  4 plant_comunity.pasture        soil_type.2                   activity ring      3  0.160  0.422   0.862  0.838  0.875
+  5 traffic.3                     waste                         activity ring      3  0.168  0.475   0.874  0.837  0.903
+  6 herbAbund.4                   waste                         activity ring      3  0.159  0.408   0.858  0.836  0.871
+  7 herbAbund.4                   traffic.3                     activity ring      3  0.176  0.481   0.875  0.835  0.904
+  8 slope                         soil_type.2                   activity ring      3  0.158  0.413   0.870  0.835  0.895
+  9 plant_comunity.pasture        waste                         activity ring      3  0.156  0.425   0.860  0.834  0.880
+ 10 humus.regular                 soil_type.2                   activity ring      3  0.166  0.414   0.869  0.834  0.891
+ 11 slope                         soil_type.4                   activity ring      3  0.163  0.414   0.864  0.833  0.881
+ 12 herbAbund.4                   soil_type.2                   activity ring      3  0.163  0.406   0.859  0.832  0.881
+ 13 humus.rare                    slope                         activity ring      3  0.148  0.422   0.866  0.832  0.888
+ 14 slope                         waste                         activity ring      3  0.150  0.412   0.866  0.832  0.884
+ 15 herbAbund.4                   soil_type.4                   activity ring      3  0.171  0.408   0.856  0.831  0.873
+ 16 humus.regular                 traffic.3                     activity ring      3  0.171  0.487   0.878  0.831  0.916
+ 17 humus.regular                 soil_type.4                   activity ring      3  0.169  0.416   0.862  0.830  0.879
+ 18 soil_type.2                   traffic.3                     activity ring      3  0.173  0.475   0.873  0.830  0.903
+ 19 leak                          slope                         activity ring      3  0.149  0.437   0.867  0.829  0.893
+ 20 herbAbund.4                   soil_type.3                   activity ring      3  0.151  0.417   0.864  0.829  0.883
 
 
 
 
 # most used combination
 ```{r}
-
-# combinations of 3 parameter for each model
-# resultFreq = result %>% dplyr::group_by(X1,X2,X3) %>% dplyr::summarise(n = n(),minAUC = min(AUC),maxAUC = max(AUC))
-# print(as_tibble(resultFreq %>% arrange(desc(n),desc(minAUC))),n=100)
-# resultFreq3 = resultFreq; result3 = result
+set.seed(2020)
+df = as_tibble(cbind(plants,preds))
+Cyn.dac.glmer = glmer(Cyn.dac~ring+activity+slope+herbAbund.4+(1|site_id),data=df,family=binomial(logit),control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun=2e5))); summary(Cyn.dac.glmer)
+Meg.max.glmer = glmer(Meg.max~ring+activity+slope+herbAbund.4+(1|site_id),data=df,family=binomial(logit),control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun=2e5)));summary(Meg.max.glmer)
+Ric.com.glmer = glmer(Ric.com~ring+activity+slope+herbAbund.4+(1|site_id),data=df,family=binomial(logit),control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun=2e5)));summary(Ric.com.glmer)
 ```
-
 
 
 ```{r}
-df = as_tibble(cbind(plants,preds))
-summary(glm(Cyn.dac~ring+slope+treeAbund.4+plant_comunity.altered.forest,data=df,family="binomial"))
-summary(glm(Eup.hir~ring+slope+treeAbund.4+plant_comunity.altered.forest,data=df,family="binomial"))
-summary(glm(Meg.max~ring+slope+treeAbund.4+plant_comunity.altered.forest,data=df,family="binomial"))
-summary(glm(Ric.com~ring+slope+treeAbund.4+plant_comunity.altered.forest,data=df,family="binomial"))
-
-
-
-
-summary(glm(Cyn.dac~ring+herbAbund.4+treeAbund.4+plant_comunity.altered.forest,data=df,family="binomial"))
-summary(glm(Eup.hir~ring+herbAbund.4+treeAbund.4+plant_comunity.altered.forest,data=df,family="binomial"))
-summary(glm(Meg.max~ring+herbAbund.4+treeAbund.4+plant_comunity.altered.forest,data=df,family="binomial"))
-summary(glm(Ric.com~ring+herbAbund.4+treeAbund.4+plant_comunity.altered.forest,data=df,family="binomial"))
-
-
-# plant_comunity.forest+plant_comunity.altered.forest: 2 singul.
-summary(glm(Cyn.dac~ring+activity+plant_comunity.forest+plant_comunity.altered.forest,data=df,family="binomial"))
-summary(glm(Eup.hir~ring+activity+plant_comunity.forest+plant_comunity.altered.forest,data=df,family="binomial"))
-summary(glm(Meg.max~ring+activity+plant_comunity.forest+plant_comunity.altered.forest,data=df,family="binomial"))
-summary(glm(Ric.com~ring+activity+plant_comunity.forest+plant_comunity.altered.forest,data=df,family="binomial"))
-
-
-# herbAbund.4+plant_comunity.shrubs: 3 singularities
-summary(glm(Cyn.dac~ring+activity+herbAbund.4+plant_comunity.shrubs,data=df,family="binomial"))
-summary(glm(Eup.hir~ring+activity+herbAbund.4+plant_comunity.shrubs,data=df,family="binomial"))
-summary(glm(Meg.max~ring+activity+herbAbund.4+plant_comunity.shrubs,data=df,family="binomial"))
-summary(glm(Ric.com~ring+activity+herbAbund.4+plant_comunity.shrubs,data=df,family="binomial"))
-
-
-# plant_comunity.altered.forest soil_type.2: 0 singl.
-summary(glm(Cyn.dac~ring+activity+soil_type.2+plant_comunity.altered.forest,data=df,family="binomial"))
-summary(glm(Eup.hir~ring+activity+soil_type.2+plant_comunity.altered.forest,data=df,family="binomial"))
-summary(glm(Meg.max~ring+activity+soil_type.2+plant_comunity.altered.forest,data=df,family="binomial"))
-summary(glm(Ric.com~ring+activity+soil_type.2+plant_comunity.altered.forest,data=df,family="binomial"))
-
-
-# plant_comunity.altered.forest soil_type.2: 0 singl.
-summary(glm(Cyn.dac~ring+activity+treeAbund.4+plant_comunity.altered.forest,data=df,family="binomial"))
-summary(glm(Eup.hir~ring+activity+treeAbund.4+plant_comunity.altered.forest,data=df,family="binomial"))
-summary(glm(Meg.max~ring+activity+treeAbund.4+plant_comunity.altered.forest,data=df,family="binomial"))
-summary(glm(Ric.com~ring+activity+treeAbund.4+plant_comunity.altered.forest,data=df,family="binomial"))
+save(Cyn.dac.glmer,Meg.max.glmer,Ric.com.glmer,file="data/individualSDM.RData")
 ```
 
-
-
-
-
-
-ring.1+ring.2+ring.3+ring.4+ring.ref+zone.high+zone.low+zone.middle+plant_comunity.altered.forest+plant_comunity.forest        
-+plant_comunity.pasture+plant_comunity.shrubs+soil_type.1+soil_type.2+soil_type.3                  
-+soil_type.4+humus.absent+humus.abundant+humus.rare+humus.regular                
-+treeAbund.0+treeAbund.1+treeAbund.2+treeAbund.3+treeAbund.4                  
-+herbAbund.0+herbAbund.1+herbAbund.2+herbAbund.3+herbAbund.4                  
-+shrubAbund.0+shrubAbund.1+shrubAbund.2+shrubAbund.3+shrubAbund.4+activity+elevation+slope+cement+leak                         
-+waste +aspect
