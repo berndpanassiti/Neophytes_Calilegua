@@ -178,7 +178,47 @@ g1 =  ggplot(dfPlot,aes(x=nObs,y=value,fill=activity)) + geom_bar(stat="identity
 
 
 
-## 2. Plot: inverse Simpson
+## 2. Plot: species richness (= Nneophytes) - Zone1-4 vs ref.
+df = vegEnv %>% dplyr::select(-site_id,-plot_id)
+df$ring2 = df$ring
+df[which(df$ring2 %in% c(1,2,3,4)),"ring2"] = "zones 1-4"
+df$ring2=as.factor(df$ring2)
+df$ring2=factor(df$ring2, levels=c("zones 1-4","ref"))
+df$activity=as.factor(df$activity)
+df$value=df$Nneophytes
+df%<>% arrange(ring2,activity) 
+
+wilcox.test(Nneophytes ~ activity, data = df)
+dat = df %>% dplyr::filter(activity=='active')
+wilcox.test(Nneophytes ~ ring2, data = dat) # W = 289, p-value = 0.02779
+dat = df %>% dplyr::filter(activity=='inactive')
+wilcox.test(Nneophytes ~ ring2, data = dat) # W = 510, p-value = 0.001046
+
+
+dfPlot <- data_summary(df, varname=c("value"),
+                    groupnames=c("ring2","activity"))
+dfPlot$yminSD<-dfPlot$value-dfPlot$sd
+dfPlot$ymaxSD<-dfPlot$value+dfPlot$sd
+dfPlot[which(dfPlot$yminSD<0),"yminSD"]<-0
+
+dfPlot$nObs =  paste(levels(df$activity),"\n",rep(c("zones 1-4","ref"),each=2),"\n(N=",as.vector(table(df$activity,df$ring2)),")",sep="")
+
+
+g2 =  ggplot(dfPlot,aes(x=reorder(nObs, -value),y=value,fill=activity)) + geom_bar(stat="identity")+
+  geom_errorbar(aes(ymin=yminSD, ymax=ymaxSD), width=.2) +
+  #scale_x_discrete(labels=nObs) +
+  labs(y = "Species richness", x = "") + # rename y-axis
+  scale_fill_manual(values=rep(c("grey41", "grey79"),5))+
+  #facet_grid(~activity, scales="free_x")+
+  scale_y_continuous(breaks=c(0,1,2,3,4,5)) +
+  theme_bw() + mytheme
+
+
+
+
+###############################################
+
+## 3. Plot: inverse Simpson
 df = vegEnv %>% dplyr::select(-site_id,-plot_id)
 df%<>%filter(Dneophytes!=0 & !ring =='ref') # library(magrittr) for %<>%
 df$ring=as.factor(df$ring)
@@ -229,7 +269,7 @@ dfPlot$nObs =  paste(levels(df$activity),"\n(N=",as.vector(table(df$activity,df$
 #dfPlot$sig<-  rep("a",nrow(dfPlot))
 dfPlot$sig<-c("a","b","a","a","a","a","","")
 
-g2 =  ggplot(dfPlot,aes(x=nObs,y=value,fill=activity)) + geom_bar(stat="identity")+
+g3 =  ggplot(dfPlot,aes(x=nObs,y=value,fill=activity)) + geom_bar(stat="identity")+
   geom_errorbar(aes(ymin=yminSD, ymax=ymaxSD), width=.2) +
   #scale_x_discrete(labels=nObs) +
   labs(y = "inverse Simpson index", x = "") + # rename y-axis
@@ -240,8 +280,68 @@ g2 =  ggplot(dfPlot,aes(x=nObs,y=value,fill=activity)) + geom_bar(stat="identity
   geom_text(mapping = aes( y =6, label = sig),size = 6,  fontface=1)
 
 
-grid.arrange(g1, g2, nrow = 2)
+
+
+
+## 4. Plot: inverse Simpson index (= Dneophytes) - Zone1-4 vs ref.
+df = vegEnv %>% dplyr::select(-site_id,-plot_id)
+df$ring2 = df$ring
+df[which(df$ring2 %in% c(1,2,3,4)),"ring2"] = "zones 1-4"
+df$ring2=as.factor(df$ring2)
+df$ring2=factor(df$ring2, levels=c("zones 1-4","ref"))
+df$activity=as.factor(df$activity)
+df$value=df$Dneophytes
+df%<>% arrange(ring2,activity) 
+
+dat = df %>% dplyr::filter(activity=='active')
+wilcox.test(Dneophytes ~ ring2, data = dat) #W = 71, p-value = 0.1749
+dat = df %>% dplyr::filter(activity=='inactive')
+wilcox.test(Dneophytes ~ ring2, data = dat) # W = 510, p-value = 0.001046
+
+
+dfPlot <- data_summary(df, varname=c("value"),
+                    groupnames=c("ring2","activity"))
+dfPlot$yminSD<-dfPlot$value-dfPlot$sd
+dfPlot$ymaxSD<-dfPlot$value+dfPlot$sd
+dfPlot[which(dfPlot$yminSD<1),"yminSD"]<-1
+
+dfPlot$nObs =  paste(levels(df$activity),"\n",rep(c("zones 1-4","ref"),each=2),"\n(N=",as.vector(table(df$activity,df$ring2)),")",sep="")
+
+dfPlot$sig<-c("a","a","","")
+
+g4 =  ggplot(dfPlot,aes(x=reorder(nObs, -value),y=value,fill=activity)) + geom_bar(stat="identity")+
+  geom_errorbar(aes(ymin=yminSD, ymax=ymaxSD), width=.2) +
+  #scale_x_discrete(labels=nObs) +
+  labs(y = "inverse Simpson index", x = "") + # rename y-axis
+  scale_fill_manual(values=rep(c("grey41", "grey79"),5))+
+  #facet_grid(~activity, scales="free_x")+
+  scale_y_continuous(trans = my_trans( from=1),breaks=c(1,2,3,4,5)) +
+  theme_bw() + mytheme 
+
+
+
+
+
+grid.arrange(g1, g2,g3,g4, nrow = 2)
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

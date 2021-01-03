@@ -14,7 +14,8 @@ library(readxl)
 ```
 
 ```{r}
-sites                <- read_excel("data/rawdata/Neofitas_sites.xlsx", sheet = "sites")
+## warnings: if plot_id eg. 169.0 -> modified by google docs - open with excel
+sites                <- read_excel("data/rawdata/Neofitas_sites.xlsx", sheet = "sites") 
 neophytes            <- read_excel("data/rawdata/Neofitas_species.xlsx", sheet = "neophytes")
 taxonomy             <- read_excel("data/rawdata/Neofitas_species.xlsx", sheet = "taxonomy")
 plantTraitsHierarchy <- read_excel("data/rawdata/TRY_dataset/Neophytes_traits.xlsx", sheet = "plant_traits_hierarchy")

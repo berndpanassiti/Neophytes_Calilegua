@@ -177,3 +177,97 @@ transpose_df <- function(df) {
 
 
 scale01 <- function(x){(x-min(x))/(max(x)-min(x))}
+
+
+
+
+# Max. combinations of environmental predictors
+#
+# Scripts allows to select environmental predictor based on
+# subjective judgement using ecological expertise (interactive)
+# Script takes correlation into account! (data.frames: predictors.cor -> df -> xy)
+# combination is saved in "y"
+
+# creation date: 19.04.2013
+
+
+
+PredictorSelection<-function(predictors.cor){
+  df<-cbind(row.names(predictors.cor),predictors.cor)
+  colnames(df)<-c("pred","predcor")
+  rownames(df)<-1:nrow(df)
+  
+  
+  
+  # SELECTION starts here:
+  
+  # get rid of factors!, sonst Wanrmeldung beim letzten loop:
+  # Warnmeldung:
+  # In `[<-.factor`(`*tmp*`, iseq, value = 
+  # "rs13,rs265,bgl,fk_klasse,nfk_klasse,kak_klasse,kfa_klasse,natveg,kultpfla,fipu_a_ln,fipu_o_ln,fipu_s_ln") :
+  #  invalid factor level, NAs generated
+  
+  xy<-data.frame(lapply(df,as.character),stringsAsFactors=FALSE)
+  
+  
+  # SELECT variables with 0 correlation
+  y<-as.vector(xy[xy[,2]==0,1])
+  xy<-xy[-which(xy[,2]==0),] # delete selected variables
+  
+  
+  gg<-NULL
+  while(nrow(xy)>0){
+    cat("\nLeft variables:",nrow(xy),"\n")
+    print(as.vector(xy[,1]))
+    #print(xy)
+    
+    x<-readline("\nSelect an additional environmental variable! ")
+    while(!(x %in% xy[,1])){
+      x<-readline("\nWrong spelling - please try again! ")
+    }
+    
+    
+    # STEP 1: add variable to selection
+    y<-c(y,x)
+    
+    # STEP 2: delete correlated variables from dataframe
+    x.cor1<-strsplit(as.vector(xy[which(xy[,1]==x),2]),"\\,") # select corr variables
+    x.cor2<-which(xy[,1] %in% x.cor1[1][[1]]) # which rows?
+    if(length(x.cor2)!=0){
+      xy<-xy[-x.cor2,] # delete selected variables (their rows)
+    }
+    # STEP 3: delete variable x
+    xy<-xy[-which(xy[,1] %in% x),]
+    
+    
+    
+    # Step 4: delete correlated variables from the "correlated variables column" of other variables
+    if(nrow(xy)>0){
+      for (i in 1:nrow(xy)){
+        g<-strsplit(as.vector(xy[i,2]),"\\,")[[1]] # splitted string of correlated variables(column 2) belonging to variable i
+        xy[i,2]<-paste(g[!(g %in% x.cor1[1][[1]])],collapse=",") # get 
+        if(length(g[!(g %in% x.cor1[1][[1]])])==0){ # if variable has 0 correlated variables -> add it to y
+          y<-c(y,as.vector(xy[i,1]))
+          gg<-c(gg,which(xy[,1] %in% xy[i,1])) # record rownumber of variable to be dropped
+        }
+        
+      }
+      if (length(gg)>0){
+        xy<-xy[-gg,]
+        gg<-NULL}
+    }
+    
+  }
+  
+  
+  
+  pred.uncor<-y
+  print(pred.uncor)
+  
+  return(pred.uncor)
+}
+
+
+
+
+
