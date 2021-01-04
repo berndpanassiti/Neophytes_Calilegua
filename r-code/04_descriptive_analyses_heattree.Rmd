@@ -61,7 +61,7 @@ heat_tree(node_label = taxon_names,
 ## Traits
 ```{r}
 Traits = dplyr::inner_join(plantTraits,plantTraitsHierarchy,by=c("TraitName"="TraitName","Trait"="Trait","Trait_id"="Trait_id"))
-Traits %<>% select (plant_id,hierarchy)
+Traits %<>% dplyr::select(plant_id,hierarchy)
 veg_data = neophytes
 veg_trait_data = dplyr::inner_join(veg_data,Traits,by=c("plant_id"="plant_id"))
 ```

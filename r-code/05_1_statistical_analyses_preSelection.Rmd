@@ -46,7 +46,7 @@ df=plantsEnv[[i]]
 
 #print(rf.form) #This is our current itteration of the formula we're using in RF
 set.seed(2021)
-plants.rf<-randomForest(rf.form,data=df,importance=TRUE,ntree=100)
+plants.rf<-randomForest(rf.form,data=df,importance=TRUE)
 #varImpPlot(plants.rf) #Examine our Variable importance plot
 resultsRF[,i+1]=plants.rf$importance[,3]
 }
@@ -55,8 +55,6 @@ resultsRF$meanVImp = apply(resultsRF[,2:4],1,mean)
 resultsRF %>%
   mutate(predictor = fct_reorder(predictor,meanVImp)) %>%
 ggplot(aes(x=meanVImp,y=predictor))+geom_point()
-
-
 ```
 
 Topology: slope

@@ -122,25 +122,37 @@ ggcorrplot::ggcorrplot(corr, hc.order = TRUE, type = "lower",
 # sjPlot::sjp.corr(envAbbr,decimals=1)
 
 
-matrix2.cor=cor(env4cor)
-zzz<-rep(0,ncol(matrix2.cor))
-z=1
+# matrix2.cor=cor(env4cor)
+# zzz<-rep(0,ncol(matrix2.cor))
+# z=1
+# 
+# for (i in 1:ncol(matrix2.cor)){
+# if(
+# (length(which(abs(matrix2.cor[-z,i])>=0.5))==0)==FALSE
+# ){ # integer(0)
+# zzz[i]<-paste(names(which(abs(matrix2.cor[-z,i])>=0.5)),collapse=",")
+# print(paste(names(which(abs(matrix2.cor[-z,i])>=0.5)),collapse=","))
+# }
+# 
+# z=z+1
+# }
+# predictors.cor<-data.frame(zzz)
+# rownames(predictors.cor)<-colnames(matrix2.cor)
+# colnames(predictors.cor)<-"r(s) >= 0.5"
+# 
+# pred.uncor = PredictorSelection(predictors.cor)
 
-for (i in 1:ncol(matrix2.cor)){
-if(
-(length(which(abs(matrix2.cor[-z,i])>=0.5))==0)==FALSE
-){ # integer(0)
-zzz[i]<-paste(names(which(abs(matrix2.cor[-z,i])>=0.5)),collapse=",")
-print(paste(names(which(abs(matrix2.cor[-z,i])>=0.5)),collapse=","))
-}
+pred.uncor=c(
+"elevation","slope","aspect","ring2","ring3","ring4",                       
+"traffic.2","plant_comunityaltered.forest","soil_type.1",                
+"soil_type.2","soil_type.3", "soil_type.4", 
+"treeAbund.1","treeAbund.2","treeAbund.3",        
+"treeAbund.4","herbAbund.0","herbAbund.1",          
+"herbAbund.2","herbAbund.3","shrubAbund.0",               
+"shrubAbund.1","shrubAbund.2","shrubAbund.3",              
+"activity","ring1","herbAbund.4",            
+"traffic.0","shrubAbund.4","humus.0")
 
-z=z+1
-}
-predictors.cor<-data.frame(zzz)
-rownames(predictors.cor)<-colnames(matrix2.cor)
-colnames(predictors.cor)<-"r(s) >= 0.5"
-
-pred.uncor = PredictorSelection(predictors.cor)
 
 ## selection
 # activity,ring1,traffic.0,shrubAbund.4,humus.0
