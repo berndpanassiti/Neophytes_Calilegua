@@ -55,6 +55,28 @@ hist(df$N_neophytes,main="Histogram of number of neophytes sample per site",xlab
 ```
 
 
+```{r}
+Nocc = apply(vegSite[,-1],2,sum)
+
+ACT = sites %>% dplyr::group_by(site_id,activity) %>% summarize(n()) %>% dplyr::select(site_id,activity) 
+df = dplyr::left_join(vegSite,ACT,by="site_id")
+df= df[,c(1,15,2:14)] # rearrange columns
+
+Table1 = data.frame(matrix(0,nrow=13,ncol=3))
+rownames(Table1) = colnames(df[,3:ncol(df)])
+colnames(Table1) = c("TotalOcc","actOcc","inactOcc")
+Table1[,1] = apply(df[,-c(1,2)],2,sum)
+
+dfActGr = data.frame(df %>% select(-site_id) %>% dplyr::group_by(activity) %>% summarise(across(everything(), sum)))
+Table1[,2] = as.numeric(dfActGr[1,-1])
+Table1[,3] = as.numeric(dfActGr[2,-1])
+Table1
+```
+
+
+
+
+
 
 
 

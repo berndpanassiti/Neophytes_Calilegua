@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 source("r-code/00_functions.R")
 load("data/workingdata.RData")
-using("ggplot2","tidyverse","knitr","mvabund","ade4")
+using("ggplot2","tidyverse","knitr","mvabund","ade4","magrittr")
 ```
 
 
@@ -21,35 +21,210 @@ https://rpubs.com/dwarton/68823
 https://heather-grab.github.io/Entom-4940/rql.html
 http://www.esapubs.org/archive/ecol/E095/002/suppl-1.pdf
 
+
+# all non-singelton species
 ```{r}
 speEnvTraits = list()
-
-spe4c = neophytesPlotPercent %>% dplyr::select(site_id,plot_id,Cyn.dac,Meg.max,Ric.com) 
+names=c("Cyn.dac","Cyp.iri","Ele.ind", "Eup.hir","Meg.max","Mel.alb","Ric.com","Son.asp","Sor.hal")
+spe4c = neophytesPlotPercent %>% dplyr::select(site_id,plot_id,all_of(names)) 
 env4c = preds %>% dplyr::select(site_id,plot_id,ring1,slope,herbAbund.4,humus.0)
 
 
 speEnv4c = data.frame(dplyr::left_join(spe4c,env4c,by=c("site_id","plot_id")))
 rownames(speEnv4c) = speEnv4c$plot_id
-speEnvTraits[[1]] = speEnv4c  %>% dplyr::select(Cyn.dac,Meg.max,Ric.com)
+speEnvTraits[[1]] = speEnv4c  %>% dplyr::select(all_of(names))
+
+
 speEnvTraits[[2]] = speEnv4c  %>% dplyr::select(ring1,slope,herbAbund.4,humus.0)
 
+speEnvTraits[[2]] %<>% dplyr::mutate_each_(funs(factor(.)),c("ring1","herbAbund.4","humus.0"))
+speEnvTraits[[2]] = data.frame(speEnvTraits[[2]] )
 
 # Traits
-Traits4c = plantTraits[which(plantTraits$plant_id %in% colnames(spe4c)),] # select neophytes
-#selectedTraits = c("dispersal_distance","height_m_max","growth_form","lifespan","growth_form","growth_rate")
-selectedTraits = c("perference_soil_humidity","lifespan")
-Traits4c = Traits4c[which(Traits4c$TraitName %in%  selectedTraits),]
-Traits4c %<>% dplyr::select(plant_id,TraitName,Trait_id)
-Traits4c =  data.frame(tidyr::spread(Traits4c,key=TraitName,value=Trait_id))
-rownames(Traits4c) = Traits4c$plant_id
-Traits4c = Traits4c[,-1]
-speEnvTraits[[3]] = Traits4c
+dat = traitSelection4c.NS %>% dplyr::mutate_each_(funs(factor(.)),colnames(traitSelection4c.NS))
+speEnvTraits[[3]] = data.frame(dat)
+
+names(speEnvTraits) = c("spe","env","traits")
+```
+
+## Non-Singleton: neg-binomial
+```{r}
+df = speEnvTraits
+set.seed(2021)
+fit=mvabund::traitglm(df$spe,df$env,df$traits)
+plot(fit)
+fit.nb.NS = fit
+result.nb.NS = summary(fit, nBoot=1000)
+
+a        = max( abs(fit$fourth.corner) )
+colort   = colorRampPalette(c("blue","white","red")) 
+plot.4th = levelplot(t(as.matrix(fit$fourth.corner)), xlab="Environmental Variables",
+ ylab="Species traits", col.regions=colort(100), at=seq(-a, a, length=100),
+ scales = list( x= list(rot = 45)))
+print(plot.4th)
+```
+
+## Non-Singleton: binomial
+```{r}
+df = speEnvTraits
+df$spe[df$spe>0] = 1
+set.seed(2021)
+fit=mvabund::traitglm(df$spe,df$env,df$traits,family="binomial")
+plot(fit)
+result.bin.NS = summary(fit, nBoot=1000)
+fit.bin.NS = fit
+```
+
+# 3 selected species
+```{r}
+speEnvTraits = list()
+names=c("Cyn.dac","Meg.max","Ric.com")
+spe4c = neophytesPlotPercent %>% dplyr::select(site_id,plot_id,all_of(names)) 
+env4c = preds %>% dplyr::select(site_id,plot_id,ring1,slope,herbAbund.4,humus.0)
+
+
+speEnv4c = data.frame(dplyr::left_join(spe4c,env4c,by=c("site_id","plot_id")))
+rownames(speEnv4c) = speEnv4c$plot_id
+speEnvTraits[[1]] = speEnv4c  %>% dplyr::select(all_of(names))
+speEnvTraits[[2]] = speEnv4c  %>% dplyr::select(ring1,slope,herbAbund.4,humus.0)
+
+speEnvTraits[[2]] %<>% dplyr::mutate_each_(funs(factor(.)),c("ring1","herbAbund.4","humus.0"))
+speEnvTraits[[2]] = data.frame(speEnvTraits[[2]] )
+
+# Traits
+# Traits
+dat = traitSelection4c.sN %>% dplyr::mutate_each_(funs(factor(.)),colnames(traitSelection4c.sN))
+speEnvTraits[[3]] = data.frame(dat)
+
 
 names(speEnvTraits) = c("spe","env","traits")
 ```
 
 ```{r}
-fit=mvabund::traitglm(speEnvTraits$spe,speEnvTraits$env,speEnvTraits$traits)
-summary(fit, nBoot=10)
+df = speEnvTraits
+set.seed(2021)
+fit=mvabund::traitglm(df$spe,df$env,df$traits)
+plot(fit)
+fit.nb.sN = fit
+result.nb.sN = summary(fit, nBoot=1000)
+
+a        = max( abs(fit$fourth.corner) )
+colort   = colorRampPalette(c("blue","white","red")) 
+plot.4th = levelplot(t(as.matrix(fit$fourth.corner)), xlab="Environmental Variables",
+ ylab="Species traits", col.regions=colort(100), at=seq(-a, a, length=100),
+ scales = list( x= list(rot = 45)))
+print(plot.4th)
+```
+
+```{r}
+df = speEnvTraits
+df$spe[df$spe>0] = 1
+set.seed(2021)
+fit=mvabund::traitglm(df$spe,df$env,df$traits,family="binomial")
+plot(fit)
+result.bin.sN = summary(fit, nBoot=1000)
+fit.bin.sN = fit
+
+a        = max( abs(fit$fourth.corner) )
+colort   = colorRampPalette(c("blue","white","red")) 
+plot.4th = levelplot(t(as.matrix(fit$fourth.corner)), xlab="Environmental Variables",
+ ylab="Species traits", col.regions=colort(100), at=seq(-a, a, length=100),
+ scales = list( x= list(rot = 45)))
+print(plot.4th)
+```
+
+
+######
+
+Percent as Braun-Blanquier
+
+## 9 Non-Singleton
+```{r}
+df = neophytes %>% dplyr::select(site_id,ring,plot_id,plant_id,cover)
+dat.bb = df %>% tidyr::spread(key=plant_id,value=cover)
+dat.bb= dat.bb %>% dplyr::mutate_at(c(4:ncol(dat.bb)), ~replace(., is.na(.), 0)) # NO factors before!
+neophytesPlotPercent=dat.bb
+neophytesPlotPercent[neophytesPlotPercent=="*"]="0.5"
+neophytesPlotPercent%<>% hablar::retype()
+neophytesPlotPercent
+speEnvTraits = list()
+names=c("Cyn.dac","Cyp.iri","Ele.ind", "Eup.hir","Meg.max","Mel.alb","Ric.com","Son.asp","Sor.hal")
+spe4c = neophytesPlotPercent %>% dplyr::select(site_id,plot_id,all_of(names))
+env4c = preds %>% dplyr::select(site_id,plot_id,ring1,slope,herbAbund.4,humus.0)
+speEnv4c = data.frame(dplyr::left_join(spe4c,env4c,by=c("site_id","plot_id")))
+rownames(speEnv4c) = speEnv4c$plot_id
+speEnvTraits[[1]] = speEnv4c  %>% dplyr::select(all_of(names))
+speEnvTraits[[2]] = speEnv4c  %>% dplyr::select(ring1,slope,herbAbund.4,humus.0)
+speEnvTraits[[2]] %<>% dplyr::mutate_each_(funs(factor(.)),c("ring1","herbAbund.4","humus.0"))
+speEnvTraits[[2]] = data.frame(speEnvTraits[[2]] )
+# Traits
+dat = traitSelection4c.NS %>% dplyr::mutate_each_(funs(factor(.)),colnames(traitSelection4c.NS))
+speEnvTraits[[3]] = data.frame(dat)
+names(speEnvTraits) = c("spe","env","traits")
+speEnvTraits
+df = speEnvTraits
+set.seed(2021)
+fit=mvabund::traitglm(df$spe,df$env,df$traits)
+plot(fit)
+fit.nb.NS = fit
+result.nb.NS = summary(fit, nBoot=1000)
+
+
+a        = max( abs(fit$fourth.corner) )
+colort   = colorRampPalette(c("blue","white","red")) 
+plot.4th = levelplot(t(as.matrix(fit$fourth.corner)), xlab="Environmental Variables",
+ ylab="Species traits", col.regions=colort(100), at=seq(-a, a, length=100),
+ scales = list( x= list(rot = 45)))
+print(plot.4th)
+```
+
+
+
+## 3 selected neophytes
+```{r}
+df = neophytes %>% dplyr::select(site_id,ring,plot_id,plant_id,cover)
+dat.bb = df %>% tidyr::spread(key=plant_id,value=cover)
+dat.bb= dat.bb %>% dplyr::mutate_at(c(4:ncol(dat.bb)), ~replace(., is.na(.), 0)) # NO factors before!
+neophytesPlotPercent=dat.bb
+neophytesPlotPercent[neophytesPlotPercent=="*"]="0.5"
+neophytesPlotPercent%<>% hablar::retype()
+neophytesPlotPercent
+speEnvTraits = list()
+names=c("Cyn.dac","Meg.max","Ric.com")
+spe4c = neophytesPlotPercent %>% dplyr::select(site_id,plot_id,all_of(names))
+env4c = preds %>% dplyr::select(site_id,plot_id,ring1,slope,herbAbund.4,humus.0)
+speEnv4c = data.frame(dplyr::left_join(spe4c,env4c,by=c("site_id","plot_id")))
+rownames(speEnv4c) = speEnv4c$plot_id
+speEnvTraits[[1]] = speEnv4c  %>% dplyr::select(all_of(names))
+speEnvTraits[[2]] = speEnv4c  %>% dplyr::select(ring1,slope,herbAbund.4,humus.0)
+speEnvTraits[[2]] %<>% dplyr::mutate_each_(funs(factor(.)),c("ring1","herbAbund.4","humus.0"))
+speEnvTraits[[2]] = data.frame(speEnvTraits[[2]] )
+# Traits
+dat = traitSelection4c.sN %>% dplyr::mutate_each_(funs(factor(.)),colnames(traitSelection4c.sN))
+speEnvTraits[[3]] = data.frame(dat)
+names(speEnvTraits) = c("spe","env","traits")
+speEnvTraits
+df = speEnvTraits
+set.seed(2021)
+fit=mvabund::traitglm(df$spe,df$env,df$traits)
+plot(fit)
+fit.nb.sN = fit
+result.nb.sN = summary(fit, nBoot=1000)
+
+
+a        = max( abs(fit$fourth.corner) )
+colort   = colorRampPalette(c("blue","white","red")) 
+plot.4th = levelplot(t(as.matrix(fit$fourth.corner)), xlab="Environmental Variables",
+ ylab="Species traits", col.regions=colort(100), at=seq(-a, a, length=100),
+ scales = list( x= list(rot = 45)))
+print(plot.4th)
+```
+
+
+```{r}
+save(
+   fit.nb.NS,result.nb.NS,
+  file="results/traitglm.RData"
+)
 ```
 

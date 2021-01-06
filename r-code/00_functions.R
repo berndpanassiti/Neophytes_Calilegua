@@ -212,7 +212,7 @@ PredictorSelection<-function(predictors.cor){
   
   # SELECT variables with 0 correlation
   y<-as.vector(xy[xy[,2]==0,1])
-  xy<-xy[-which(xy[,2]==0),] # delete selected variables
+  if(length(which(xy[,2]==0))!=0){xy<-xy[-which(xy[,2]==0),]} # delete selected variables
   
   
   gg<-NULL

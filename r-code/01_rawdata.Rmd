@@ -18,9 +18,15 @@ library(readxl)
 sites                <- read_excel("data/rawdata/Neofitas_sites.xlsx", sheet = "sites") 
 neophytes            <- read_excel("data/rawdata/Neofitas_species.xlsx", sheet = "neophytes")
 taxonomy             <- read_excel("data/rawdata/Neofitas_species.xlsx", sheet = "taxonomy")
-plantTraitsHierarchy <- read_excel("data/rawdata/TRY_dataset/Neophytes_traits.xlsx", sheet = "plant_traits_hierarchy")
-plantTraits          <- read_excel("data/rawdata/TRY_dataset/Neophytes_traits.xlsx", sheet = "plant_traits")
+plantTraitsHierarchy <- read_excel("data/rawdata/TRY_dataset/Neophytes_traitsR.xlsx", sheet = "plant_traits_hierarchy")
+plantTraits          <- read_excel("data/rawdata/TRY_dataset/Neophytes_traitsR.xlsx", sheet = "plant_traits")
 ```
+
+Check traits:
+unique(plantTraits[which(!plantTraits$TraitName %in% plantTraitsHierarchy$TraitName),2])
+unique(plantTraits[which(!plantTraits$Trait %in% plantTraitsHierarchy$Trait),c(2,3)])
+unique(plantTraits[which(!plantTraits$Trait_id %in% plantTraitsHierarchy$Trait_id),c(2,3,4)])
+
 
 ```{r}
 save(

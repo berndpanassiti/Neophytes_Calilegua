@@ -106,16 +106,16 @@ envAbbr = env4cor
 colnames(envAbbr)=dplyr::coalesce(predNamesAbbr$abbr[match(colnames(envAbbr), predNamesAbbr$names)], colnames(envAbbr))
 
 
-ct <- psych::corr.test(env[,-c(1,2)], adjust = "none")
-corr <- ct$r
-p.mat <- ct$p
-ggcorrplot2::ggcorrplot.mixed(corr)
-
-
-ggcorrplot::ggcorrplot(corr, hc.order = TRUE, type = "lower",
-   outline.col = "white",
-   ggtheme = ggplot2::theme_gray,p.mat = p.mat,insig = "blank",
-   colors = c("#6D9EC1", "white", "#E46726"))
+# ct <- psych::corr.test(env[,-c(1,2)], adjust = "none")
+# corr <- ct$r
+# p.mat <- ct$p
+# ggcorrplot2::ggcorrplot.mixed(corr)
+# 
+# 
+# ggcorrplot::ggcorrplot(corr, hc.order = TRUE, type = "lower",
+#    outline.col = "white",
+#    ggtheme = ggplot2::theme_gray,p.mat = p.mat,insig = "blank",
+#    colors = c("#6D9EC1", "white", "#E46726"))
 
 
 # # also maybe:
@@ -160,10 +160,10 @@ pred.uncor=c(
 envAbbr = env4cor[,which(colnames(env4cor) %in% pred.uncor)]
 colnames(envAbbr)=dplyr::coalesce(predNamesAbbr$abbr[match(colnames(envAbbr), predNamesAbbr$names)], colnames(envAbbr))
 
-ct <- psych::corr.test(envAbbr, adjust = "none")
-corr <- ct$r
-p.mat <- ct$p
-ggcorrplot2::ggcorrplot.mixed(corr)
+# ct <- psych::corr.test(envAbbr, adjust = "none")
+# corr <- ct$r
+# p.mat <- ct$p
+# ggcorrplot2::ggcorrplot.mixed(corr)
 #### Correlation End ###########
 ```
 
@@ -253,18 +253,168 @@ NfreqNeophytes=apply(s,1,sum) # total number of selected neophytes
 plants = as_tibble(cbind(veg[1:3],s,NfreqNeophytes,NtotalNeophytes))
 ```
 
-# Traits - wrong import of values!
-> plantTraits[which(plantTraits$Trait == '43832.0' | plantTraits$Trait == '43835.0'),]
-# A tibble: 7 x 3
-  plant_id TraitName    Trait  
-  <chr>    <chr>        <chr>  
-1 Mel.alb  height_m_max 43832.0
-2 Pan.max  height_m_max 43832.0
-3 Son.asp  height_m_max 43832.0
-4 Sor.hal  height_m_max 43832.0
-5 Leo.jap  seed_mg      43835.0
-6 Mel.alb  seed_mg      43835.0
-7 Sor.hal  seed_mg      43835.0
+# Traits - correlation
+
+## Input for heat tree matrix
+```{r}
+sites$plot = paste("plot_",sites$plot_id,sep="")
+# which plots have neophyte data?
+NeophyteSites = sites[-which(!sites$plot_id %in% neophytesPlotPercent$plot_id),] 
+NeophyteSites=NeophyteSites[-which(NeophyteSites$traffic==0),] # ignoring reference sites, only 2 records
+
+# compile trait data
+Traits = dplyr::inner_join(plantTraits,plantTraitsHierarchy,by=c("Trait_id"="Trait_id"))
+Traits %<>% select(plant_id,Trait_id,hierarchy)
+
+# reshape dataset: rows = trait, cols = plots
+veg_data = data.frame(neophytesPlotPercent)
+rownames(veg_data) = paste("plot_",veg_data$plot_id,sep="")
+
+# remove plots that are not in NeophyteSites
+veg_data=veg_data[-which(!rownames(veg_data) %in% NeophyteSites$plot),]
+
+veg_data = veg_data %>% dplyr::select(-site_id,-ring,-plot_id)
+veg_dataT = transpose_df(veg_data)
+colnames(veg_dataT)[1] = "plant_id"
+
+# combine veg and trait datasets
+veg_trait_data = dplyr::inner_join(Traits,veg_dataT,by=c("plant_id"="plant_id"))
+```
+
+
+
+# Correlation Traits
+## Correlation between traits
+```{r}
+df = veg_trait_data %>% dplyr::select(-plant_id,-hierarchy)
+df = data.frame(df %>% group_by(Trait_id)%>% summarise_all(sum))
+rownames(df) = df$Trait_id
+df = df[,-1]
+df = data.frame(t(df))
+
+# correlation
+
+# ct <- psych::corr.test(df, adjust = "none")
+# corr <- ct$r
+# p.mat <- ct$p
+# ggcorrplot2::ggcorrplot.mixed(corr)
+
+
+# ggcorrplot::ggcorrplot(corr, hc.order = TRUE, type = "lower",
+#    outline.col = "white",
+#    ggtheme = ggplot2::theme_gray,p.mat = p.mat,insig = "blank",
+#    colors = c("#6D9EC1", "white", "#E46726"))
+# 
+# 
+# # # also maybe:
+# # sjPlot::sjp.corr(envAbbr,decimals=1)
+
+
+
+#### Correlation End ###########
+```
+
+
+## Correlation for traits for non-singleton neophytes
+```{r}
+# SELECT non-singleton neophytes
+names=c("Cyn.dac","Cyp.iri","Ele.ind", "Eup.hir","Meg.max","Mel.alb","Ric.com","Son.asp","Sor.hal")
+spe4c = neophytesPlotPercent %>% dplyr::select(site_id,plot_id,all_of(names)) 
+Traits4c = plantTraits[which(plantTraits$plant_id %in% colnames(spe4c)),] # select neophytes
+Traits4c %<>% dplyr::select(plant_id,TraitName,Trait_id)
+traitsNoVariance = table(Traits4c$plant_id,Traits4c$Trait_id)
+selectedTraits = names(which(apply(traitsNoVariance,2,sum)!=0 & apply(traitsNoVariance,2,sum)!=length(names)))
+
+df = veg_trait_data[which(veg_trait_data$Trait_id %in% selectedTraits),]
+df = df %>% dplyr::filter(plant_id %in% names)
+df = df %>% dplyr::select(-plant_id,-hierarchy)
+df = data.frame(df %>% group_by(Trait_id)%>% summarise_all(sum))
+rownames(df) = df$Trait_id
+df = df[,-1]
+traitsPlot = data.frame(t(df))
+
+# correlation
+# ct <- psych::corr.test(traitsPlot, adjust = "none")
+# corr <- ct$r
+# p.mat <- ct$p
+# ggcorrplot2::ggcorrplot.mixed(corr)
+# 
+# matrix2.cor=cor(traitsPlot)
+# zzz<-rep(0,ncol(matrix2.cor))
+# z=1
+# 
+# for (i in 1:ncol(matrix2.cor)){
+# if(
+# (length(which(abs(matrix2.cor[-z,i])>=0.5))==0)==FALSE
+# ){ # integer(0)
+# zzz[i]<-paste(names(which(abs(matrix2.cor[-z,i])>=0.5)),collapse=",")
+# print(paste(names(which(abs(matrix2.cor[-z,i])>=0.5)),collapse=","))
+# }
+# 
+# z=z+1
+# }
+# predictors.cor<-data.frame(zzz)
+# rownames(predictors.cor)<-colnames(matrix2.cor)
+# colnames(predictors.cor)<-"r(s) >= 0.5"
+# 
+# traits.uncor = PredictorSelection(predictors.cor)
+# # selection: TolShadeH,HeightMaxH,Ny,DispS,TolFireL
+
+# traits.uncor
+#[1] "TolShadeH"  "HeightMaxH" "Ny"         "DispS"      "ReprodVeg"  "TolFireL" 
+
+traitSelection4c.NS = as.data.frame.matrix(traitsNoVariance[,colnames(traitsNoVariance) %in% traits.uncor])
+```
+
+
+## Correlation for traits for 3 seected neophytes (>10% occ)
+```{r}
+# SELECT 3 neophytes
+names=c("Cyn.dac","Meg.max","Ric.com")
+spe4c = neophytesPlotPercent %>% dplyr::select(site_id,plot_id,all_of(names)) 
+Traits4c = plantTraits[which(plantTraits$plant_id %in% colnames(spe4c)),] # select neophytes
+Traits4c %<>% dplyr::select(plant_id,TraitName,Trait_id)
+traitsNoVariance = table(Traits4c$plant_id,Traits4c$Trait_id)
+selectedTraits = names(which(apply(traitsNoVariance,2,sum)!=0 & apply(traitsNoVariance,2,sum)!=length(names)))
+
+df = veg_trait_data[which(veg_trait_data$Trait_id %in% selectedTraits),]
+df = df %>% dplyr::filter(plant_id %in% names)
+df = df %>% dplyr::select(-plant_id,-hierarchy)
+df = data.frame(df %>% group_by(Trait_id)%>% summarise_all(sum))
+rownames(df) = df$Trait_id
+df = df[,-1]
+traitsPlot = data.frame(t(df))
+
+# correlation
+# ct <- psych::corr.test(traitsPlot, adjust = "none")
+# corr <- ct$r
+# p.mat <- ct$p
+# ggcorrplot2::ggcorrplot.mixed(corr)
+# 
+matrix2.cor=cor(traitsPlot)
+zzz<-rep(0,ncol(matrix2.cor))
+z=1
+
+for (i in 1:ncol(matrix2.cor)){
+if(
+(length(which(abs(matrix2.cor[-z,i])>=0.5))==0)==FALSE
+){ # integer(0)
+zzz[i]<-paste(names(which(abs(matrix2.cor[-z,i])>=0.5)),collapse=",")
+print(paste(names(which(abs(matrix2.cor[-z,i])>=0.5)),collapse=","))
+}
+
+z=z+1
+}
+predictors.cor<-data.frame(zzz)
+rownames(predictors.cor)<-colnames(matrix2.cor)
+colnames(predictors.cor)<-"r(s) >= 0.5"
+
+traits.uncor = PredictorSelection(predictors.cor)
+# # traits.uncor
+# # [1] "TolShadeH"  "HeightMaxH" "ReprodVeg"
+
+traitSelection4c.sN = as.data.frame.matrix(traitsNoVariance[,colnames(traitsNoVariance) %in% traits.uncor])
+```
 
 
 
@@ -276,8 +426,9 @@ save(
   sites,taxonomy,
   plantTraits,plantTraitsHierarchy,
   veg,env,vegEnv,vegSite,
-  plants,preds,
+  plants,preds,pred.uncor,
+  traitSelection4c.sN,traitSelection4c.NS,
+  veg_trait_data,
   file="data/workingdata.RData"
 )
 ```
-
