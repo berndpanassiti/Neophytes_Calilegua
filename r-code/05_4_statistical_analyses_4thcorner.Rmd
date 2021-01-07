@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 source("r-code/00_functions.R")
 load("data/workingdata.RData")
-using("ggplot2","tidyverse","knitr","mvabund","ade4","magrittr")
+using("ggplot2","tidyverse","knitr","mvabund","ade4","magrittr","lattice")
 ```
 
 

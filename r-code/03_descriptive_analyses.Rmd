@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 source("r-code/00_functions.R") # data_summary
 load("data/workingdata.RData")
 source("r-code/00_functions.R")
-using("ggplot2","ellipse","magrittr","tidyverse","vegan","labdsv","broom","gridExtra","FSA")
+using("ggplot2","ellipse","magrittr","tidyverse","vegan","labdsv","broom","gridExtra","FSA","rstatixA")
 # ellipse: #library(GGally) problem with NA's
 # magrittr: # for %<>%
 
@@ -140,7 +140,7 @@ dunn_test(Dneophytes ~ ring,data=df,p.adjust.method="bonferroni")
 # 6 Dneophytes 3      4         20    13     -1.67 0.0943    0.566     ns
 ```
 
-# 3 Barplots - Number of neophytes and inverse Simpson per plot depending on site activity
+# 3 Barplots - Number of neophytes,inverse Simpson and cover per plot depending on site activity
 ```{r}
 # tables needed: vegEnv
 
@@ -202,28 +202,43 @@ g1 =  ggplot(dfPlot,aes(x=nObs,y=value,fill=activity)) + geom_bar(stat="identity
 
 ## 2. Plot: species richness (= Nneophytes) - Zone1-4 vs ref.
 df = vegEnv %>% dplyr::select(-site_id,-plot_id)
-df$ring2 = df$ring
-df[which(df$ring2 %in% c(1,2,3,4)),"ring2"] = "zones 1-4"
-df$ring2=as.factor(df$ring2)
-df$ring2=factor(df$ring2, levels=c("zones 1-4","ref"))
+df$zones = df$ring
+df[which(df$zones %in% c(1,2,3,4)),"zones"] = "zones 1-4"
+df$zones=as.factor(df$zones)
+df$zones=factor(df$zones, levels=c("zones 1-4","ref"))
 df$activity=as.factor(df$activity)
 df$value=df$Nneophytes
-df%<>% arrange(ring2,activity) 
+df%<>% arrange(zones,activity) 
 
-wilcox.test(Nneophytes ~ activity, data = df)
+# active vs. inactive - all zones incl. ref
+wilcox.test(Nneophytes ~ activity, data = df) # W = 1879.5, p-value = 0.003975
+
+# active vs. inactive - zones 1-4
+df2 = df%>% dplyr:: filter(zones=="zones 1-4")
+wilcox.test(Nneophytes ~ activity, data = df) # W = 1879.5, p-value = 0.003975
+
+
+
+# zones 1-4 vs. ref
+wilcox.test(Nneophytes ~ zones, data = df) #W = 1597, p-value = 8.215e-05
+
 dat = df %>% dplyr::filter(activity=='active')
-wilcox.test(Nneophytes ~ ring2, data = dat) # W = 289, p-value = 0.02779
+wilcox.test(Nneophytes ~ zones, data = dat) # W = 289, p-value = 0.02779
 dat = df %>% dplyr::filter(activity=='inactive')
-wilcox.test(Nneophytes ~ ring2, data = dat) # W = 510, p-value = 0.001046
+wilcox.test(Nneophytes ~ zones, data = dat) # W = 510, p-value = 0.001046
 
+
+
+
+#########
 
 dfPlot <- data_summary(df, varname=c("value"),
-                    groupnames=c("ring2","activity"))
+                    groupnames=c("zones","activity"))
 dfPlot$yminSD<-dfPlot$value-dfPlot$sd
 dfPlot$ymaxSD<-dfPlot$value+dfPlot$sd
 dfPlot[which(dfPlot$yminSD<0),"yminSD"]<-0
 
-dfPlot$nObs =  paste(levels(df$activity),"\n",rep(c("zones 1-4","ref"),each=2),"\n(N=",as.vector(table(df$activity,df$ring2)),")",sep="")
+dfPlot$nObs =  paste(levels(df$activity),"\n",rep(c("zones 1-4","ref"),each=2),"\n(N=",as.vector(table(df$activity,df$zones)),")",sep="")
 
 
 g2 =  ggplot(dfPlot,aes(x=reorder(nObs, -value),y=value,fill=activity)) + geom_bar(stat="identity")+
@@ -307,27 +322,38 @@ g3 =  ggplot(dfPlot,aes(x=nObs,y=value,fill=activity)) + geom_bar(stat="identity
 
 ## 4. Plot: inverse Simpson index (= Dneophytes) - Zone1-4 vs ref.
 df = vegEnv %>% dplyr::select(-site_id,-plot_id)
-df$ring2 = df$ring
-df[which(df$ring2 %in% c(1,2,3,4)),"ring2"] = "zones 1-4"
-df$ring2=as.factor(df$ring2)
-df$ring2=factor(df$ring2, levels=c("zones 1-4","ref"))
+df$zones = df$ring
+df[which(df$zones %in% c(1,2,3,4)),"zones"] = "zones 1-4"
+df$zones=as.factor(df$zones)
+df$zones=factor(df$zones, levels=c("zones 1-4","ref"))
 df$activity=as.factor(df$activity)
 df$value=df$Dneophytes
-df%<>% arrange(ring2,activity) 
+df%<>% arrange(zones,activity) 
 
-dat = df %>% dplyr::filter(activity=='active')
-wilcox.test(Dneophytes ~ ring2, data = dat) #W = 71, p-value = 0.1749
-dat = df %>% dplyr::filter(activity=='inactive')
-wilcox.test(Dneophytes ~ ring2, data = dat) # W = 510, p-value = 0.001046
+
+
+
+# active vs. inactive - all zones incl. ref
+wilcox.test(Dneophytes ~ activity, data = df) # W = 703.5, p-value = 0.04191
+
+# active vs. inactive - zones 1-4
+df2 = df%>% dplyr:: filter(zones=="zones 1-4")
+wilcox.test(Dneophytes ~ activity, data = df) # W = 703.5, p-value = 0.04191
+
+
+
+########################################
+
+
 
 
 dfPlot <- data_summary(df, varname=c("value"),
-                    groupnames=c("ring2","activity"))
+                    groupnames=c("zones","activity"))
 dfPlot$yminSD<-dfPlot$value-dfPlot$sd
 dfPlot$ymaxSD<-dfPlot$value+dfPlot$sd
 dfPlot[which(dfPlot$yminSD<1),"yminSD"]<-1
 
-dfPlot$nObs =  paste(levels(df$activity),"\n",rep(c("zones 1-4","ref"),each=2),"\n(N=",as.vector(table(df$activity,df$ring2)),")",sep="")
+dfPlot$nObs =  paste(levels(df$activity),"\n",rep(c("zones 1-4","ref"),each=2),"\n(N=",as.vector(table(df$activity,df$zones)),")",sep="")
 
 dfPlot$sig<-c("a","a","","")
 
@@ -339,6 +365,7 @@ g4 =  ggplot(dfPlot,aes(x=reorder(nObs, -value),y=value,fill=activity)) + geom_b
   #facet_grid(~activity, scales="free_x")+
   scale_y_continuous(trans = my_trans( from=1),breaks=c(1,2,3,4,5)) +
   theme_bw() + mytheme 
+
 
 
 
