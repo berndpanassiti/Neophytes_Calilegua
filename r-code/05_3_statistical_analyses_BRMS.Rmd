@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 source("r-code/00_functions.R")
 load("data/workingdata.RData")
-using("ggplot2","tidyverse","knitr","brms","sjPlot")
+using("ggplot2","tidyverse","knitr","brms","sjPlot","gridExtra")
 ```
 
 
@@ -64,17 +64,26 @@ fit.kfold = list(fit.kfold1,fit.kfold2,fit.kfold3,fit.kfold4,fit.kfold5)
 
 # plot individual models
 ```{r}
-mytheme <-  theme(axis.title = element_text(size =18),
-        axis.text = element_text(size =14),
+mytheme <-  theme(axis.title = element_text(size =20),
+        axis.text = element_text(size =20),
         strip.text= element_text(size = 18),
         legend.position = "none",
-        plot.title = element_text(hjust = 0.5))
+        plot.title = element_text(hjust = 0.5,size=20,face = "italic"))
 
-pp1 <- plot_model(fit[[1]],transform = NULL, title = "Cynodon dactylon",show.intercept = T,vline.color = "black")+theme_bw()+mytheme
-pp2 <- plot_model(fit[[2]],transform = NULL, title = "Megathyrsus maximus",show.intercept = T,vline.color = "black")+theme_bw()+mytheme+theme(axis.text.y = element_blank())
-pp3 <- plot_model(fit[[3]],transform = NULL, title= "Ricinus comunis",show.intercept = T,vline.color = "black")+theme_bw()+mytheme+theme(axis.text.y = element_blank())
-grid.arrange(pp1,pp2,pp3,nrow=1)
+mylabels = c("low levels of organic matter\n(absent or rare)",">50% coverage of herbs in plot\n(herb abundance = abundant)","slope","Zone 1","Intercept")
+
+pp1 <- plot_model(fit[[1]],transform = NULL, title = "Cynodon dactylon",vline.color = "gray90",show.intercept = T,colors=c("gray70","gray5"))+theme_bw()+mytheme+
+levels(pp1$data$term)=mylabels
+  
+pp2 <- plot_model(fit[[2]],transform = NULL, title = "Megathyrsus maximus",vline.color = "gray90",show.intercept = T,colors=c("gray70","gray5"))+theme_bw()+mytheme+theme(axis.text.y = element_blank())
+levels(pp2$data$term)=mylabels
+
+pp3 <- plot_model(fit[[3]],transform = NULL, title = "Ricinus communis",vline.color = "gray90",show.intercept = T,colors=c("gray70","gray5"))+theme_bw()+mytheme+theme(axis.text.y = element_blank())
+levels(pp3$data$term)=mylabels
+
+ggarrange(pp1, pp2,pp3, widths = c(3,1.5,1.5),nrow=1)
 ```
+
 
 
 

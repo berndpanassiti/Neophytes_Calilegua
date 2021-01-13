@@ -15,5 +15,7 @@ literature/
 notes/
 paper/
 results/
-r-code/older_versions
+r-code/*
+images/
+
 
