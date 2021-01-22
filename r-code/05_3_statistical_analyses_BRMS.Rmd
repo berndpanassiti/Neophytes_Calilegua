@@ -12,7 +12,14 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 source("r-code/00_functions.R")
 load("data/workingdata.RData")
-using("ggplot2","tidyverse","knitr","brms","sjPlot","gridExtra")
+using("ggplot2","tidyverse","knitr","brms","sjPlot","gridExtra","future","ggpmisc")
+plan(multicore)
+
+mytheme <-  theme(axis.title = element_text(size =18),
+        axis.text = element_text(size =14),
+        strip.text= element_text(size = 18),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5))
 ```
 
 
@@ -47,18 +54,24 @@ fit[[s]] <- brm(y ~ ring1+slope+herbAbund.4+humus.0+(1|site_id),data=dat,family=
 # show summary
 lapply(fit, function(x)summary(x))
 
+
 # 10 fold cv
 for (i in 1:5){
 set.seed(2020)
   # use the future package for parallelization
-#library(future)
-#plan(multiprocess)
-  fit.kfold=brms::kfold(fit[[i]],  save_fits = TRUE)
+
+  fit.kfold=brms::kfold(fit[[i]], folds="stratified", save_fits = TRUE)
 assign(paste("fit.kfold",i,"",sep=""),fit.kfold)
 }
 
 fit.kfold = NULL
 fit.kfold = list(fit.kfold1,fit.kfold2,fit.kfold3,fit.kfold4,fit.kfold5)
+
+fittedValues.m1 = fitted(fit[[1]])
+fittedValues.m2 = fitted(fit[[2]])
+fittedValues.m3 = fitted(fit[[3]])
+fittedValues.m4 = fitted(fit[[4]])
+fittedValues.m5 = fitted(fit[[5]])
 ```
 
 
@@ -85,6 +98,58 @@ ggarrange(pp1, pp2,pp3, widths = c(3,1.5,1.5),nrow=1)
 ```
 
 
+
+# Predicted vs. observed
+```{r}
+df = GbmPlantsPreds
+#S-SDM
+fittedValues.SSDM = fittedValues.m1[,'Estimate']+fittedValues.m2[,'Estimate']+fittedValues.m3[,'Estimate']
+plot(df$NfreqNeophytes,fittedValues.SSDM)
+cor(df$NfreqNeophytes,fittedValues.SSDM)
+# [1] 0.7286541
+
+# MEM 1
+fittedValues.MEM1 = fittedValues.m4[,'Estimate']
+plot(df$NfreqNeophytes,fittedValues.MEM1)
+cor(df$NfreqNeophytes,fittedValues.MEM1)
+#[1] 0.6520213
+
+# MEM 2
+fittedValues.MEM2 = fittedValues.m5[,'Estimate']
+cor(df$NtotalNeophytes,fittedValues.MEM2)
+#[1] 0.8196173
+
+##### Plot
+my.formula=y~x
+
+x = c(fittedValues.SSDM,fittedValues.MEM1,fittedValues.MEM2)
+y = c(df$NfreqNeophytes,df$NfreqNeophytes,df$NtotalNeophytes)
+modeltype=c(rep("S-SDM",143),rep("MEM1",143),rep("MEM2",143))
+
+dat= data.frame(x,y,modeltype)
+dat$modeltype = factor(dat$modeltype,levels = c("S-SDM", "MEM1", "MEM2"))
+
+dat_lm <-dat  %>%
+  group_by(modeltype) %>%
+  nest() %>%
+  # Fit linear model
+  mutate(Mod = map(data, ~lm(y ~ x, data = .x))) %>%
+  # Get the R2
+  mutate(R2 = map_dbl(Mod, ~round(summary(.x)$r.squared, 2)),
+         p = map_dbl(Mod, ~round(summary(.x)$coefficients[2,4], 3))) 
+
+ggplot(data = dat, aes(x = x, y = y)) +
+   geom_smooth(method = "lm", se=FALSE, color="black", formula = my.formula) +
+   geom_point() + 
+  facet_wrap(.~modeltype,scales="free")+
+  labs(y = "observed", x = "fitted") +
+  # Add label
+  geom_richtext(data = dat_lm, 
+             aes(x = Inf, y = Inf, 
+                 label = paste0("r<sup>2</sup>= ", R2, ", p<0.001",sep = " ")),
+             vjust = 1.3, hjust = 2.6,inherit.aes = FALSE,fill = NA, label.color = NA) +
+theme_bw() + mytheme
+```
 
 
 

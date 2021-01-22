@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 source("r-code/00_functions.R") # data_summary
 load("data/workingdata.RData")
 source("r-code/00_functions.R")
-using("ggplot2","ellipse","magrittr","tidyverse","vegan","labdsv","broom","gridExtra","FSA","rstatixA")
+using("ggplot2","ellipse","magrittr","tidyverse","vegan","labdsv","broom","gridExtra","FSA","rstatix")
 # ellipse: #library(GGally) problem with NA's
 # magrittr: # for %<>%
 
@@ -153,7 +153,7 @@ df$value=df$Nneophytes
 df%<>% arrange(ring,activity) # sort for ring and activity
 
 ########### 2-group Mann-Whitney U Test #############
-wilcox.test(Dneophytes ~ activity, data = df)
+#wilcox.test(Dneophytes ~ activity, data = df)
 # 	Wilcoxon rank sum test with continuity correction
 # 
 # data:  Dneophytes by activity
@@ -161,16 +161,16 @@ wilcox.test(Dneophytes ~ activity, data = df)
 # alternative hypothesis: true location shift is not equal to 0
 
 #df %>% group_by(ring) %>%  do(broom::tidy(kruskal.test(x = .$Dneophytes, g = .$activity))) 
-dat = df %>% dplyr::filter(ring=='1')
-wilcox.test(Dneophytes ~ activity, data = dat) # W = 64, p-value = 0.03816
-dat = df %>% dplyr::filter(ring=='2')
-wilcox.test(Dneophytes ~ activity, data = dat) # W = 184, p-value = 0.05986
-dat = df %>% dplyr::filter(ring=='3')
-wilcox.test(Dneophytes ~ activity, data = dat) # W = 47.5, p-value = 0.887
-dat = df %>% dplyr::filter(ring=='4')
-wilcox.test(Dneophytes ~ activity, data = dat) 
+# dat = df %>% dplyr::filter(ring=='1')
+# wilcox.test(Dneophytes ~ activity, data = dat) # W = 64, p-value = 0.03816
+# dat = df %>% dplyr::filter(ring=='2')
+# wilcox.test(Dneophytes ~ activity, data = dat) # W = 184, p-value = 0.05986
+# dat = df %>% dplyr::filter(ring=='3')
+# wilcox.test(Dneophytes ~ activity, data = dat) # W = 47.5, p-value = 0.887
+# dat = df %>% dplyr::filter(ring=='4')
+# wilcox.test(Dneophytes ~ activity, data = dat) 
 
-df %>% group_by(ring,activity) %>% get_summary_stats(Nneophytes, type = "mean_sd")
+#df %>% group_by(ring,activity) %>% get_summary_stats(Nneophytes, type = "mean_sd")
 ####################################################
 
 
@@ -181,6 +181,7 @@ dfPlot$yminSD<-dfPlot$value-dfPlot$sd
 dfPlot$ymaxSD<-dfPlot$value+dfPlot$sd
 dfPlot[which(dfPlot$yminSD<0),"yminSD"]<-0
 
+levels(df$activity)=c("inactive","active")
 dfPlot$nObs =  paste(levels(df$activity),"\n(N=",as.vector(table(df$activity,df$ring)),")",sep="")
 
 
@@ -190,7 +191,7 @@ dfPlot$sig<-c("a","b","a","a","a","a","","")
 g1 =  ggplot(dfPlot,aes(x=nObs,y=value,fill=activity)) + geom_bar(stat="identity")+
   geom_errorbar(aes(ymin=yminSD, ymax=ymaxSD), width=.2) +
   #scale_x_discrete(labels=nObs) +
-  labs(y = "Species richness", x = "") + # rename y-axis
+  labs(y = "SR", x = "") + # rename y-axis
     scale_fill_manual(values=rep(c("grey41", "grey79"),5))+
     facet_grid(~ring, scales="free_x")+
   scale_y_continuous(breaks=c(0,1,2,3,4,5)) +
@@ -200,62 +201,12 @@ g1 =  ggplot(dfPlot,aes(x=nObs,y=value,fill=activity)) + geom_bar(stat="identity
 
 
 
-## 2. Plot: species richness (= Nneophytes) - Zone1-4 vs ref.
-df = vegEnv %>% dplyr::select(-site_id,-plot_id)
-df$zones = df$ring
-df[which(df$zones %in% c(1,2,3,4)),"zones"] = "zones 1-4"
-df$zones=as.factor(df$zones)
-df$zones=factor(df$zones, levels=c("zones 1-4","ref"))
-df$activity=as.factor(df$activity)
-df$value=df$Nneophytes
-df%<>% arrange(zones,activity) 
-
-# active vs. inactive - all zones incl. ref
-wilcox.test(Nneophytes ~ activity, data = df) # W = 1879.5, p-value = 0.003975
-
-# active vs. inactive - zones 1-4
-df2 = df%>% dplyr:: filter(zones=="zones 1-4")
-wilcox.test(Nneophytes ~ activity, data = df) # W = 1879.5, p-value = 0.003975
-
-
-
-# zones 1-4 vs. ref
-wilcox.test(Nneophytes ~ zones, data = df) #W = 1597, p-value = 8.215e-05
-
-dat = df %>% dplyr::filter(activity=='active')
-wilcox.test(Nneophytes ~ zones, data = dat) # W = 289, p-value = 0.02779
-dat = df %>% dplyr::filter(activity=='inactive')
-wilcox.test(Nneophytes ~ zones, data = dat) # W = 510, p-value = 0.001046
-
-
-
-
-#########
-
-dfPlot <- data_summary(df, varname=c("value"),
-                    groupnames=c("zones","activity"))
-dfPlot$yminSD<-dfPlot$value-dfPlot$sd
-dfPlot$ymaxSD<-dfPlot$value+dfPlot$sd
-dfPlot[which(dfPlot$yminSD<0),"yminSD"]<-0
-
-dfPlot$nObs =  paste(levels(df$activity),"\n",rep(c("zones 1-4","ref"),each=2),"\n(N=",as.vector(table(df$activity,df$zones)),")",sep="")
-
-
-g2 =  ggplot(dfPlot,aes(x=reorder(nObs, -value),y=value,fill=activity)) + geom_bar(stat="identity")+
-  geom_errorbar(aes(ymin=yminSD, ymax=ymaxSD), width=.2) +
-  #scale_x_discrete(labels=nObs) +
-  labs(y = "Species richness", x = "") + # rename y-axis
-  scale_fill_manual(values=rep(c("grey41", "grey79"),5))+
-  #facet_grid(~activity, scales="free_x")+
-  scale_y_continuous(breaks=c(0,1,2,3,4,5)) +
-  theme_bw() + mytheme
-
 
 
 
 ###############################################
 
-## 3. Plot: inverse Simpson
+## 2. Plot: inverse Simpson
 df = vegEnv %>% dplyr::select(-site_id,-plot_id)
 df%<>%filter(Dneophytes!=0 & !ring =='ref') # library(magrittr) for %<>%
 df$ring=as.factor(df$ring)
@@ -265,7 +216,7 @@ df%<>% arrange(ring,activity) # sort for ring and activity
 
 
 ########### 2-group Mann-Whitney U Test #############
-wilcox.test(Dneophytes ~ activity, data = df)
+#wilcox.test(Dneophytes ~ activity, data = df)
 # 	Wilcoxon rank sum test with continuity correction
 # 
 # data:  Dneophytes by activity
@@ -273,14 +224,14 @@ wilcox.test(Dneophytes ~ activity, data = df)
 # alternative hypothesis: true location shift is not equal to 0
 
 #df %>% group_by(ring) %>%  do(broom::tidy(kruskal.test(x = .$Dneophytes, g = .$activity))) 
-dat = df %>% dplyr::filter(ring=='1')
-wilcox.test(Dneophytes ~ activity, data = dat) # W = 64, p-value = 0.03816
-dat = df %>% dplyr::filter(ring=='2')
-wilcox.test(Dneophytes ~ activity, data = dat) # W = 184, p-value = 0.05986
-dat = df %>% dplyr::filter(ring=='3')
-wilcox.test(Dneophytes ~ activity, data = dat) # W = 47.5, p-value = 0.887
-
-df %>% group_by(ring,activity) %>% get_summary_stats(Dneophytes, type = "mean_sd")
+# dat = df %>% dplyr::filter(ring=='1')
+# wilcox.test(Dneophytes ~ activity, data = dat) # W = 64, p-value = 0.03816
+# dat = df %>% dplyr::filter(ring=='2')
+# wilcox.test(Dneophytes ~ activity, data = dat) # W = 184, p-value = 0.05986
+# dat = df %>% dplyr::filter(ring=='3')
+# wilcox.test(Dneophytes ~ activity, data = dat) # W = 47.5, p-value = 0.887
+# 
+# df %>% group_by(ring,activity) %>% get_summary_stats(Dneophytes, type = "mean_sd")
 ####################################################
 
 
@@ -300,16 +251,17 @@ dfPlot$yminSD<-dfPlot$value-dfPlot$sd
 dfPlot$ymaxSD<-dfPlot$value+dfPlot$sd
 dfPlot[which(dfPlot$yminSD<1),"yminSD"]<-1
 
+levels(df$activity)=c("inactive","active")
 dfPlot$nObs =  paste(levels(df$activity),"\n(N=",as.vector(table(df$activity,df$ring)),")",sep="")
 
 
 #dfPlot$sig<-  rep("a",nrow(dfPlot))
 dfPlot$sig<-c("a","b","a","a","a","a","","")
 
-g3 =  ggplot(dfPlot,aes(x=nObs,y=value,fill=activity)) + geom_bar(stat="identity")+
+g2 =  ggplot(dfPlot,aes(x=nObs,y=value,fill=activity)) + geom_bar(stat="identity")+
   geom_errorbar(aes(ymin=yminSD, ymax=ymaxSD), width=.2) +
   #scale_x_discrete(labels=nObs) +
-  labs(y = "inverse Simpson index", x = "") + # rename y-axis
+  labs(y = "1/Sim", x = "") + # rename y-axis
     scale_fill_manual(values=rep(c("grey41", "grey79"),5))+
     facet_grid(~ring, scales="free_x")+
     scale_y_continuous(trans = my_trans( from=1),breaks=c(1,2,3,4,5)) +
@@ -320,58 +272,9 @@ g3 =  ggplot(dfPlot,aes(x=nObs,y=value,fill=activity)) + geom_bar(stat="identity
 
 
 
-## 4. Plot: inverse Simpson index (= Dneophytes) - Zone1-4 vs ref.
-df = vegEnv %>% dplyr::select(-site_id,-plot_id)
-df$zones = df$ring
-df[which(df$zones %in% c(1,2,3,4)),"zones"] = "zones 1-4"
-df$zones=as.factor(df$zones)
-df$zones=factor(df$zones, levels=c("zones 1-4","ref"))
-df$activity=as.factor(df$activity)
-df$value=df$Dneophytes
-df%<>% arrange(zones,activity) 
 
 
-
-
-# active vs. inactive - all zones incl. ref
-wilcox.test(Dneophytes ~ activity, data = df) # W = 703.5, p-value = 0.04191
-
-# active vs. inactive - zones 1-4
-df2 = df%>% dplyr:: filter(zones=="zones 1-4")
-wilcox.test(Dneophytes ~ activity, data = df) # W = 703.5, p-value = 0.04191
-
-
-
-########################################
-
-
-
-
-dfPlot <- data_summary(df, varname=c("value"),
-                    groupnames=c("zones","activity"))
-dfPlot$yminSD<-dfPlot$value-dfPlot$sd
-dfPlot$ymaxSD<-dfPlot$value+dfPlot$sd
-dfPlot[which(dfPlot$yminSD<1),"yminSD"]<-1
-
-dfPlot$nObs =  paste(levels(df$activity),"\n",rep(c("zones 1-4","ref"),each=2),"\n(N=",as.vector(table(df$activity,df$zones)),")",sep="")
-
-dfPlot$sig<-c("a","a","","")
-
-g4 =  ggplot(dfPlot,aes(x=reorder(nObs, -value),y=value,fill=activity)) + geom_bar(stat="identity")+
-  geom_errorbar(aes(ymin=yminSD, ymax=ymaxSD), width=.2) +
-  #scale_x_discrete(labels=nObs) +
-  labs(y = "inverse Simpson index", x = "") + # rename y-axis
-  scale_fill_manual(values=rep(c("grey41", "grey79"),5))+
-  #facet_grid(~activity, scales="free_x")+
-  scale_y_continuous(trans = my_trans( from=1),breaks=c(1,2,3,4,5)) +
-  theme_bw() + mytheme 
-
-
-
-
-
-
-grid.arrange(g1, g2,g3,g4, nrow = 2)
+grid.arrange(g1, g2, nrow = 2)
 ```
 
 
@@ -450,6 +353,44 @@ ggplot(dfPlot,aes(x=species,y=n))+ geom_bar(stat="identity")+
 
 
 
+
+
+
+# Descriptive figure - Number of neophytes presences per zone
+- attention: this plot maybe wrong due to unequal number of plots
+```{r}
+df1 = neophytes %>% dplyr::select(site_id,ring,plot_id,plant_id,cover)
+df2= sites%>% dplyr::select("site_id","plot_id","activity")
+dfC = dplyr::left_join(df1,df2,by=c("site_id","plot_id"))
+
+#table(sites$ring,sites$activity)
+  #     active inactive
+  # 1        9        9
+  # 2       20       20
+  # 3       17       17
+  # 4       17       18
+  # ref      6       10
+
+colnames(dfC)[c(4,5)]=c("plant_id","cover")
+dfPlot = dfC%>% group_by(plant_id,ring,cover,activity)%>% summarise(n = n())
+dfPlot$freq = dfPlot$n
+dfPlot$freq[dfPlot$ring=="1" ] = dfPlot$freq[dfPlot$ring=="1" ]/9
+dfPlot$freq[dfPlot$ring=="2" ] = dfPlot$freq[dfPlot$ring=="2" ]/20
+dfPlot$freq[dfPlot$ring=="3" ] = dfPlot$freq[dfPlot$ring=="3" ]/17
+dfPlot$freq[dfPlot$ring=="4" & dfPlot$activity=="active"] = dfPlot$freq[dfPlot$ring=="4" & dfPlot$activity=="active"]/17
+dfPlot$freq[dfPlot$ring=="4" & dfPlot$activity=="inactive"] = dfPlot$freq[dfPlot$ring=="4" & dfPlot$activity=="inactive"]/18
+dfPlot$freq[dfPlot$ring=="ref" & dfPlot$activity=="active"] = dfPlot$freq[dfPlot$ring=="ref" & dfPlot$activity=="active"]/6
+dfPlot$freq[dfPlot$ring=="ref" & dfPlot$activity=="inactive"] = dfPlot$freq[dfPlot$ring=="ref" & dfPlot$activity=="inactive"]/10
+
+dfPlot %>% filter(plant_id %in% c("Cyn.dac","Meg.max")) %>%
+dfPlot %>% 
+ggplot( aes(x=cover, y=freq, fill=activity)) +
+geom_bar(stat='identity', position=position_dodge2(preserve = "single"))+
+    facet_grid(plant_id~ring)+
+  labs(x= "", y = "Relative frequencies of cover") + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 0, vjust=0.4,face = "italic"),legend.position = "none")
+```
 
 
 
