@@ -16,6 +16,12 @@ using("ggplot2","tidyverse","purrr","dplyr","broom","knitr","dismo","skimr","car
 
 rm(.Random.seed, envir=globalenv())
 set.seed(2020)
+
+mytheme <-  theme(axis.title = element_text(size =18),
+        axis.text = element_text(size =14),
+        strip.text= element_text(size = 18),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5))
 ```
 
 https://rspatial.org/raster/sdm/9_sdm_brt.html
@@ -310,6 +316,76 @@ gbm.fittedValues.10folds.selectedNeophytes = list(neophyte1.obsfitted.folds,neop
 
 
 
+
+# Predicted vs. observed
+```{r}
+df = GbmPlantsPreds
+#S-SDM
+fittedValues.SSDM = gbm.fits[[1]]$fitted+gbm.fits[[2]]$fitted+gbm.fits[[3]]$fitted
+cor(df$NfreqNeophytes,fittedValues.SSDM)
+#[1] 0.6552167
+
+# MEM 1
+fittedValues.MEM1 = gbm.fits[[4]]$fitted
+cor(df$NfreqNeophytes,fittedValues.MEM1)
+#[1] 0.6730885
+
+# MEM 2
+fittedValues.MEM2 = gbm.fits[[5]]$fitted
+cor(df$NtotalNeophytes,fittedValues.MEM2)
+#[1] 0.7424807
+
+##### Plot
+my.formula=y~x
+
+x = c(fittedValues.SSDM,fittedValues.MEM1,fittedValues.MEM2)
+y = c(df$NfreqNeophytes,df$NfreqNeophytes,df$NtotalNeophytes)
+modeltype=c(rep("S-SDM",143),rep("MEM1",143),rep("MEM2",143))
+
+dat= data.frame(x,y,modeltype)
+dat$modeltype = factor(dat$modeltype,levels = c("S-SDM", "MEM1", "MEM2"))
+
+dat_lm <-dat  %>%
+  group_by(modeltype) %>%
+  nest() %>%
+  # Fit linear model
+  mutate(Mod = map(data, ~lm(y ~ x, data = .x))) %>%
+  # Get the R2
+  mutate(R2 = map_dbl(Mod, ~round(summary(.x)$r.squared, 2)),
+         p = map_dbl(Mod, ~round(summary(.x)$coefficients[2,4], 3))) 
+
+ggplot(data = dat, aes(x = x, y = y)) +
+   geom_smooth(method = "lm", se=FALSE, color="black", formula = my.formula) +
+   geom_point() + 
+  facet_wrap(.~modeltype,scales="free")+
+  labs(y = "observed", x = "fitted") +
+  # Add label
+  geom_richtext(data = dat_lm, 
+             aes(x = Inf, y = Inf, 
+                 label = paste0("r<sup>2</sup>= ", R2, ", p<0.001",sep = " ")),
+             vjust = 1.8, hjust = 2,inherit.aes = FALSE,fill = NA, label.color = NA) +
+theme_bw() + mytheme
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Final table - Individual GBM
 ```{r}
 explainedDeviance = gbm.tune.result.1$explainedDeviance
@@ -475,7 +551,7 @@ gbm.simSR.selectedNeophytesSite = simSR.selectedNeophytesSite # save
 ```
 
 ```{r}
-save(GBMresult,gbm.tune.result.1,
+save(GBMresult,gbm.tune.result.1,gbm.fits,
 gbm.fittedValues.selectedNeophytes,
 gbm.simSR.selectedNeophytesSite,gbm.Cindex,gbm.ss.fit,
 file="data/results.gbm.RData")

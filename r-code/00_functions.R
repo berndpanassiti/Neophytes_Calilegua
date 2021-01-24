@@ -268,6 +268,22 @@ PredictorSelection<-function(predictors.cor){
 }
 
 
+# cAUC computation according Scherer et al. (2020) and Gastón and Garcia-Viñas (2013):
+
+cAUC.fct=function(p,y){
+  if(sum(y)==length(y)){return(NA)}else{
+    x= data.frame(p,y)
+    Kp=aggregate(rank(p)~y, x, sum)$rank[2]
+    np=sum(y)
+    na=length(y)-np
+    
+    return((Kp-(np*(np+1)/2))/(np*na))}}
+
+# toy example
+# p=c(0.61,0.34,0.28,0.2,0.11,0.04,0.01,0.01,rep(0,9))
+# y=c(1,1,1,0,1,rep(0,12))
+# cAUC.fct(p=p,y=y)
+# #[1] 0.9807692
 
 
 
