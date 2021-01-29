@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 source("r-code/00_functions.R")
 load("data/workingdata.RData")
-using("ggplot2","tidyverse","knitr","brms","sjPlot","gridExtra","future","ggpmisc")
+using("ggplot2","tidyverse","knitr","brms","sjPlot","gridExtra","future","ggpmisc","ggpubr","ggtext","loo","bayesplot")
 plan(multicore)
 
 mytheme <-  theme(axis.title = element_text(size =18),
@@ -42,12 +42,13 @@ fit=list()
 for (s in 1:5){
 dat=data.frame(cbind(y=df[,s],df[,6:ncol(df)],GbmPlantsPreds[,1]))
 colnames(dat)[1]="y"
-family=bernoulli(link = "logit")
+#family=bernoulli(link = "logit")
 
-if(s %in% c(4,5)) {family = "poisson"}
+#if(s %in% c(4,5)) {family = "poisson"}
+if(s %in% c(4,5)) {family = "negbinomial"}
 
 set.seed(2020)
-fit[[s]] <- brm(y ~ ring1+slope+herbAbund.4+humus.0+(1|site_id),data=dat,family=family,iter = 5000,chains=4,control = list(adapt_delta = 0.99,max_treedepth=15))
+fit[[s]] <- brm(y ~ ring1+slope+herbAbund.4+humus.0+(1|site_id),data=dat,family=family,iter = 30000,chains=4,control = list(adapt_delta = 0.99,max_treedepth=15))
 }
 
 
@@ -76,7 +77,7 @@ fittedValues.m5 = fitted(fit[[5]])
 ```
 
 
-# plot individual models
+# plot individual models - sjplot
 ```{r}
 mytheme <-  theme(axis.title = element_text(size =20),
         axis.text = element_text(size =20),
@@ -86,7 +87,7 @@ mytheme <-  theme(axis.title = element_text(size =20),
 
 mylabels = c("low levels of organic matter\n(absent or rare)",">50% coverage of herbs in plot\n(herb abundance = abundant)","slope","Zone 1","Intercept")
 
-pp1 <- plot_model(fit[[1]],transform = NULL, title = "Cynodon dactylon",vline.color = "gray90",show.intercept = T,colors=c("gray70","gray5"))+theme_bw()+mytheme+
+pp1 <- plot_model(fit[[1]],transform = NULL, title = "Cynodon dactylon",vline.color = "gray90",show.intercept = T,colors=c("gray70","gray5"))+theme_bw()+mytheme
 levels(pp1$data$term)=mylabels
   
 pp2 <- plot_model(fit[[2]],transform = NULL, title = "Megathyrsus maximus",vline.color = "gray90",show.intercept = T,colors=c("gray70","gray5"))+theme_bw()+mytheme+theme(axis.text.y = element_blank())
@@ -95,7 +96,60 @@ levels(pp2$data$term)=mylabels
 pp3 <- plot_model(fit[[3]],transform = NULL, title = "Ricinus communis",vline.color = "gray90",show.intercept = T,colors=c("gray70","gray5"))+theme_bw()+mytheme+theme(axis.text.y = element_blank())
 levels(pp3$data$term)=mylabels
 
-ggarrange(pp1, pp2,pp3, widths = c(3,1.5,1.5),nrow=1)
+ggpubr::ggarrange(pp1, pp2,pp3, widths = c(3,1.5,1.5),nrow=1)
+```
+
+# plot individual models - bayesplot
+```{r}
+mytheme1 <-  theme(axis.title = element_text(size =20),
+        axis.text = element_text(size =20),
+        strip.text= element_text(size = 18),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5,size=20,face = "italic"))
+
+
+mytheme2 <-  theme(axis.title = element_text(size =20),
+        axis.ticks.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.text = element_text(size =20),
+        strip.text= element_text(size = 18),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5,size=20,face = "italic"))
+
+pars= c("b_Intercept","b_ring11","b_slope","b_herbAbund.41","b_humus.01")
+
+Div = function(x) {x/10}
+
+pp1 <- mcmc_intervals(fit[[1]],pars=pars,transformations="Div")+theme_bw()+mytheme1 + labs(title = "Cynodon dactylon") +xlim(-5,5)  #scale_y_discrete(labels= mylabels) 
+
+pp2 <- mcmc_intervals(fit[[2]],pars=pars)+theme_bw()+mytheme2 + labs(title = "Megathyrsus maximus")+xlim(-5,5) 
+
+pp3 <- mcmc_intervals(fit[[3]],pars=pars)+theme_bw()+mytheme2 + labs(title = "Ricinus communis")+xlim(-5,5)
+
+ggpubr::ggarrange(pp1, pp2,pp3, widths = c(2.3,1.2,1.2),nrow=1)
+```
+
+
+
+
+####
+```{r}
+#summary(fit[[s]])
+
+dharmaPlots=list()
+for (s in 1:5){
+set.seed(2021)
+preds <- posterior_predict(fit[[s]], nsamples = 250, summary = FALSE)
+preds <- t(preds)
+
+
+res <- createDHARMa(simulatedResponse = preds, 
+                    fittedPredictedResponse = apply(preds, 1, mean), 
+                    observedResponse = fit[[s]]$data$y)
+
+dharmaPlots[[s]]=plot(res)
+}
+
 ```
 
 
@@ -129,6 +183,59 @@ modeltype=c(rep("S-SDM",143),rep("MEM1",143),rep("MEM2",143))
 
 dat= data.frame(x,y,modeltype)
 dat$modeltype = factor(dat$modeltype,levels = c("S-SDM", "MEM1", "MEM2"))
+
+##################
+dat1=dat%>%dplyr::filter(modeltype=="S-SDM")
+summary(lm(y~x,data=dat1))
+# Residuals:
+#     Min      1Q  Median      3Q     Max 
+# -1.6422 -0.3326 -0.1271  0.3850  1.6238 
+# 
+# Coefficients:
+#             Estimate Std. Error t value Pr(>|t|)    
+# (Intercept) -0.07030    0.08267   -0.85    0.397    
+# x            1.08230    0.08567   12.63   <2e-16 ***
+# ---
+# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# Residual standard error: 0.5506 on 141 degrees of freedom
+# Multiple R-squared:  0.5309,	Adjusted R-squared:  0.5276 
+# F-statistic: 159.6 on 1 and 141 DF,  p-value: < 2.2e-16
+
+dat2=dat%>%dplyr::filter(modeltype=="MEM1")
+summary(lm(y~x,data=dat2))
+# Residuals:
+#     Min      1Q  Median      3Q     Max 
+# -1.3700 -0.4194 -0.2097  0.4439  1.9386 
+# 
+# Coefficients:
+#             Estimate Std. Error t value Pr(>|t|)    
+# (Intercept) -0.01389    0.09438  -0.147    0.883    
+# x            1.01699    0.09959  10.211   <2e-16 ***
+# ---
+# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# Residual standard error: 0.6095 on 141 degrees of freedom
+# Multiple R-squared:  0.4251,	Adjusted R-squared:  0.4211 
+# F-statistic: 104.3 on 1 and 141 DF,  p-value: < 2.2e-16
+
+dat3=dat%>%dplyr::filter(modeltype=="MEM2")
+summary(lm(y~x,data=dat3))
+# Residuals:
+#     Min      1Q  Median      3Q     Max 
+# -2.1061 -0.4052 -0.1780  0.4926  4.3181 
+# 
+# Coefficients:
+#             Estimate Std. Error t value Pr(>|t|)    
+# (Intercept) -0.07764    0.09712  -0.799    0.425    
+# x            1.06971    0.06297  16.988   <2e-16 ***
+# ---
+# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# Residual standard error: 0.8048 on 141 degrees of freedom
+# Multiple R-squared:  0.6718,	Adjusted R-squared:  0.6694 
+# F-statistic: 288.6 on 1 and 141 DF,  p-value: < 2.2e-16
+
 
 dat_lm <-dat  %>%
   group_by(modeltype) %>%
@@ -170,9 +277,9 @@ brmAUCFold   = rep(NA,10) # AUC
 brmCor       = rep(NA,10) # Cor fitted train vs. test
 
 nFolds=10
-#for (i in 1:5){
+
 saveAllWarnings(
-for (i in 5){  
+for (i in 5){
 kfold.m = fit.kfold[[i]]
 
 for(f in 1:nFolds){
@@ -211,8 +318,7 @@ if(i<4){
   brms.perfCritera$AUC.mean[i]= mean(brmAUCFold,na.rm=T)
   brms.perfCritera$AUC.max[i] = max(brmAUCFold,na.rm=T)
   brms.perfCritera$AUC.min[i] = min(brmAUCFold,na.rm=T)
-}
-}
+}}
 , logFile=paste("results/2021.01.24-BRMS.neophyte",i,".K10CV.warninglog.R",sep=""))
 
 brms.perfCritera
@@ -221,7 +327,7 @@ mean(brms.perfCritera$bayes_R2.mean[1:3]);brms.perfCritera$bayes_R2.mean[1:3] # 
 mean(brms.perfCritera$Cor.mean[1:3]);brms.perfCritera$Cor.mean[1:3] # Cor
 mean(brms.perfCritera$AUC.mean[1:3]);brms.perfCritera$AUC.mean[1:3] # AUC
 ```
-```
+
 
 
 # S-SDM
@@ -284,8 +390,8 @@ mean(as.vector(na.omit(Cindex)))
 ```
 
 ```{r}
-save(fit,fit.kfold,brms.perfCritera,
-     brms.Cindex,
+save(fit,fit.kfold.iter30000,brms.perfCritera,brms.fittedValues.10folds.selectedNeophytes,
+     Cindex,dharmaPlots,
      file="results/2021.01.24-result.brms.iter30000.RData")
 ```
 

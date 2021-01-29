@@ -15,7 +15,6 @@ load("data/workingdata.RData")
 using("plyr","ggplot2","tidyverse","purrr","dplyr","broom","knitr","skimr","MuMIn","ROCR","pscl","pROC","PerformanceAnalytics","randomForest")
 
 rm(.Random.seed, envir=globalenv())
-set.seed(2020)
 Nplants=3
 ```
 

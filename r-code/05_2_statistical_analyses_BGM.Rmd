@@ -345,6 +345,60 @@ modeltype=c(rep("S-SDM",143),rep("MEM1",143),rep("MEM2",143))
 dat= data.frame(x,y,modeltype)
 dat$modeltype = factor(dat$modeltype,levels = c("S-SDM", "MEM1", "MEM2"))
 
+##################
+dat1=dat%>%dplyr::filter(modeltype=="S-SDM")
+summary(lm(y~x,data=dat1))
+# Residuals:
+#      Min       1Q   Median       3Q      Max 
+# -1.36491 -0.42042 -0.09585  0.45233  1.63509 
+# 
+# Coefficients:
+#             Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)  -0.5248     0.1380  -3.802 0.000213 ***
+# x             1.6571     0.1609  10.299  < 2e-16 ***
+# ---
+# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# Residual standard error: 0.6073 on 141 degrees of freedom
+# Multiple R-squared:  0.4293,	Adjusted R-squared:  0.4253 
+# F-statistic: 106.1 on 1 and 141 DF,  p-value: < 2.2e-16
+
+dat2=dat%>%dplyr::filter(modeltype=="MEM1")
+summary(lm(y~x,data=dat2))
+# Residuals:
+#     Min      1Q  Median      3Q     Max 
+# -1.3009 -0.4293 -0.0736  0.4298  1.6991 
+# 
+# Coefficients:
+#             Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)  -0.1952     0.1044  -1.869   0.0637 .  
+# x             1.3357     0.1236  10.807   <2e-16 ***
+# ---
+# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# Residual standard error: 0.5945 on 141 degrees of freedom
+# Multiple R-squared:  0.453,	Adjusted R-squared:  0.4492 
+# F-statistic: 116.8 on 1 and 141 DF,  p-value: < 2.2e-16
+
+dat3=dat%>%dplyr::filter(modeltype=="MEM2")
+summary(lm(y~x,data=dat3))
+
+# Residuals:
+#     Min      1Q  Median      3Q     Max 
+# -1.5947 -0.5144 -0.1623  0.4856  4.4379 
+# 
+# Coefficients:
+#             Estimate Std. Error t value Pr(>|t|)    
+# (Intercept) -0.14553    0.12377  -1.176    0.242    
+# x            1.18228    0.08983  13.162   <2e-16 ***
+# ---
+# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# Residual standard error: 0.9409 on 141 degrees of freedom
+# Multiple R-squared:  0.5513,	Adjusted R-squared:  0.5481 
+# F-statistic: 173.2 on 1 and 141 DF,  p-value: < 2.2e-16
+
+
 dat_lm <-dat  %>%
   group_by(modeltype) %>%
   nest() %>%
@@ -554,7 +608,7 @@ gbm.simSR.selectedNeophytesSite = simSR.selectedNeophytesSite # save
 save(GBMresult,gbm.tune.result.1,gbm.fits,
 gbm.fittedValues.selectedNeophytes,
 gbm.simSR.selectedNeophytesSite,gbm.Cindex,gbm.ss.fit,
-file="data/results.gbm.RData")
+file="results/results.gbm.RData")
 ```
 
 

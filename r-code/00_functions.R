@@ -286,4 +286,16 @@ cAUC.fct=function(p,y){
 # #[1] 0.9807692
 
 
+# FUNCTION TO SAVE WARNINGS:
+#    - EVALUATES A GIVEN EXPRESSION
+#    - SAVES ALL WARNINGS TO A LOGFILE
+saveAllWarnings <- function(expr, logFile="warning_log.R") {
+  withCallingHandlers(expr, 
+                      warning=function(w) {
+                        cat(conditionMessage(w), "\n\n",  file=logFile, append=TRUE)
+                        invokeRestart("muffleWarning")
+                      })
+}
+
+
 
