@@ -28,7 +28,6 @@ using("tidyr","dplyr","tibble","taxa","metacoder","ggplot2","magrittr")
 
 veg_data = neophytes
 veg_data = dplyr::left_join(veg_data,taxonomy,by=c("plant_id"="plant_id"))
-
 ```
 
 

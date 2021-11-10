@@ -42,6 +42,9 @@ fit=list()
 for (s in 1:5){
 dat=data.frame(cbind(y=df[,s],df[,6:ncol(df)],GbmPlantsPreds[,1]))
 colnames(dat)[1]="y"
+
+### family!
+# model are run separatly, for single species logit, for community negbinomial
 #family=bernoulli(link = "logit")
 
 #if(s %in% c(4,5)) {family = "poisson"}
